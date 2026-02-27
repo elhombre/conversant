@@ -3506,6 +3506,7 @@ __metadata:
     clsx: "npm:^2.1.1"
     lucide-react: "npm:^0.575.0"
     next: "npm:16.1.6"
+    openai: "npm:^6.25.0"
     radix-ui: "npm:^1.4.3"
     react: "npm:19.2.3"
     react-dom: "npm:19.2.3"
@@ -4530,6 +4531,23 @@ __metadata:
     powershell-utils: "npm:^0.1.0"
     wsl-utils: "npm:^0.3.0"
   checksum: 10c0/7aeeda4131268ed90f90e7728dda5c46bb0c6205b27a4be3e86ea33593e30dd393423e20e31c00802a8e635ef59becaee33ef9749a8ceb027567cd253e9e7b1e
+  languageName: node
+  linkType: hard
+
+"openai@npm:^6.25.0":
+  version: 6.25.0
+  resolution: "openai@npm:6.25.0"
+  peerDependencies:
+    ws: ^8.18.0
+    zod: ^3.25 || ^4.0
+  peerDependenciesMeta:
+    ws:
+      optional: true
+    zod:
+      optional: true
+  bin:
+    openai: bin/cli
+  checksum: 10c0/88d2000493a2131977ebfe029b6344cf4e598f602779c06c7e9593008e225f6a6ae54a70231591b3174960ea8925bb98ee940f822ebfe810876e6ae330719252
   languageName: node
   linkType: hard
 

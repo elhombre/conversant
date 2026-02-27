@@ -2,21 +2,21 @@ import type { VadConfig, VadPreset } from '@/lib/vad/types'
 
 export const VAD_PRESETS: Record<VadPreset, VadConfig> = {
   Normal: {
-    thresholdDb: -43,
+    thresholdDb: -52,
     startHoldMs: 80,
     endHoldMs: 520,
     minSpeechMs: 220,
     maxUtteranceMs: 15000,
   },
   Noisy: {
-    thresholdDb: -36,
+    thresholdDb: -45,
     startHoldMs: 120,
     endHoldMs: 720,
     minSpeechMs: 300,
     maxUtteranceMs: 15000,
   },
   Thoughtful: {
-    thresholdDb: -45,
+    thresholdDb: -55,
     startHoldMs: 70,
     endHoldMs: 900,
     minSpeechMs: 240,
