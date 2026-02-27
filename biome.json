@@ -1,0 +1,103 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
+  "css": {
+    "formatter": {
+      "enabled": true
+    },
+    "parser": {
+      "cssModules": true,
+      "tailwindDirectives": true
+    }
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!**/.next",
+      "!**/node_modules",
+      "!**/.yarn",
+      "!**/.pnp.cjs",
+      "!**/.pnp.loader.mjs",
+      "!**/out",
+      "!**/build",
+      "!**/dist",
+      "!**/coverage",
+      "!**/next-env.d.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space"
+  },
+  "javascript": {
+    "formatter": {
+      "arrowParentheses": "asNeeded",
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "jsxQuoteStyle": "double",
+      "lineWidth": 120,
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    },
+    "globals": [],
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "linter": {
+    "rules": {
+      "complexity": {
+        "useLiteralKeys": {
+          "fix": "none",
+          "level": "off",
+          "options": {}
+        }
+      },
+      "correctness": {
+        "noUndeclaredVariables": "warn",
+        "noUnusedImports": {
+          "fix": "safe",
+          "level": "warn",
+          "options": {}
+        },
+        "noUnusedVariables": {
+          "fix": "none",
+          "level": "error",
+          "options": {}
+        }
+      },
+      "style": {
+        "useConst": {
+          "fix": "safe",
+          "level": "warn",
+          "options": {}
+        },
+        "useEnumInitializers": {
+          "fix": "unsafe",
+          "level": "off",
+          "options": {}
+        },
+        "useImportType": {
+          "fix": "safe",
+          "level": "info",
+          "options": {}
+        },
+        "useSelfClosingElements": {
+          "fix": "safe",
+          "level": "warn",
+          "options": {}
+        },
+        "useTemplate": {
+          "fix": "safe",
+          "level": "warn",
+          "options": {}
+        }
+      }
+    }
+  },
+  "vcs": {
+    "clientKind": "git",
+    "enabled": false,
+    "useIgnoreFile": false
+  }
+}
