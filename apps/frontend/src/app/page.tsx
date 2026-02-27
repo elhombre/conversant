@@ -5,62 +5,104 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EnergyVad } from '@/lib/vad/energy-vad'
+import { VAD_PRESET_ORDER, VAD_PRESETS } from '@/lib/vad/presets'
+import type { VadConfig, VadEndReason, VadPreset } from '@/lib/vad/types'
 
 type ConversationState = 'listening' | 'user_speaking' | 'processing' | 'assistant_speaking' | 'error'
 
-type ProcessingStage = 'stt' | 'llm' | 'tts' | null
-
 type MicStatus = 'idle' | 'requesting' | 'ready' | 'denied' | 'error'
 
-type TurnMetrics = {
-  sttMs: number | null
-  llmMs: number | null
-  ttsMs: number | null
-  totalMs: number | null
+type CaptureStage = 'idle' | 'speaking' | 'finalizing'
+
+type LastUtterance = {
+  url: string
+  mimeType: string
+  durationMs: number
+  sizeBytes: number
+  reason: VadEndReason
+  createdAtMs: number
+  preset: VadPreset
 }
 
-const EMPTY_METRICS: TurnMetrics = {
-  sttMs: null,
-  llmMs: null,
-  ttsMs: null,
-  totalMs: null,
+type PendingUtteranceMeta = {
+  token: number
+  sessionToken: number
+  startMs: number
+  endMs: number
+  durationMs: number
+  reason: VadEndReason
+  accepted: boolean
 }
 
-function wait(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+function pickRecorderMimeType() {
+  if (typeof MediaRecorder === 'undefined') return null
+
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+  for (const mimeType of candidates) {
+    if (MediaRecorder.isTypeSupported(mimeType)) {
+      return mimeType
+    }
+  }
+
+  return ''
 }
 
 export default function Home() {
   const [state, setState] = useState<ConversationState>('listening')
-  const [processingStage, setProcessingStage] = useState<ProcessingStage>(null)
+  const [captureStage, setCaptureStage] = useState<CaptureStage>('idle')
   const [micStatus, setMicStatus] = useState<MicStatus>('idle')
   const [inputLevel, setInputLevel] = useState(0)
   const [isMuted, setIsMuted] = useState(false)
   const [interruptionCount, setInterruptionCount] = useState(0)
   const [lastError, setLastError] = useState<string | null>(null)
-  const [lastUserText, setLastUserText] = useState('')
-  const [lastAssistantText, setLastAssistantText] = useState('')
-  const [turnMetrics, setTurnMetrics] = useState<TurnMetrics>(EMPTY_METRICS)
+  const [activePreset, setActivePreset] = useState<VadPreset>('Normal')
+  const [lastUtterance, setLastUtterance] = useState<LastUtterance | null>(null)
 
   const streamRef = useRef<MediaStream | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const rafRef = useRef<number | null>(null)
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const rafRef = useRef<number | null>(null)
   const sampleBufferRef = useRef<Uint8Array | null>(null)
-  const simulationTokenRef = useRef(0)
-  const isMutedRef = useRef(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recorderChunksRef = useRef<BlobPart[]>([])
+  const pendingUtteranceRef = useRef<PendingUtteranceMeta | null>(null)
+  const utteranceTokenRef = useRef(0)
+  const sessionTokenRef = useRef(0)
   const micRequestInFlightRef = useRef(false)
+  const isMutedRef = useRef(false)
+  const micStatusRef = useRef<MicStatus>('idle')
+  const activePresetRef = useRef<VadPreset>('Normal')
+  const vadRef = useRef(new EnergyVad(VAD_PRESETS.Normal))
 
-  const resetMeasurements = useCallback(() => {
-    setTurnMetrics(EMPTY_METRICS)
-    setLastUserText('')
-    setLastAssistantText('')
-    setLastError(null)
-    setProcessingStage(null)
+  const setPreset = useCallback((preset: VadPreset) => {
+    setActivePreset(preset)
+    vadRef.current.setConfig(VAD_PRESETS[preset])
   }, [])
 
-  const stopLoop = useCallback(() => {
+  useEffect(() => {
+    isMutedRef.current = isMuted
+  }, [isMuted])
+
+  useEffect(() => {
+    micStatusRef.current = micStatus
+  }, [micStatus])
+
+  useEffect(() => {
+    activePresetRef.current = activePreset
+  }, [activePreset])
+
+  const releaseUtteranceUrl = useCallback(() => {
+    setLastUtterance(previous => {
+      if (previous) {
+        URL.revokeObjectURL(previous.url)
+      }
+      return null
+    })
+  }, [])
+
+  const stopMeterLoop = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = null
@@ -68,7 +110,16 @@ export default function Home() {
   }, [])
 
   const cleanupAudio = useCallback(() => {
-    stopLoop()
+    stopMeterLoop()
+
+    const recorder = mediaRecorderRef.current
+    if (recorder?.state === 'recording') {
+      recorder.stop()
+    }
+
+    mediaRecorderRef.current = null
+    recorderChunksRef.current = []
+    pendingUtteranceRef.current = null
 
     sourceRef.current?.disconnect()
     sourceRef.current = null
@@ -86,7 +137,138 @@ export default function Home() {
       void contextRef.current.close()
       contextRef.current = null
     }
-  }, [stopLoop])
+
+    vadRef.current.reset()
+  }, [stopMeterLoop])
+
+  const handleRecorderStop = useCallback(() => {
+    const pending = pendingUtteranceRef.current
+    pendingUtteranceRef.current = null
+
+    if (!pending) {
+      setCaptureStage('idle')
+      setState('listening')
+      return
+    }
+
+    if (pending.sessionToken !== sessionTokenRef.current) {
+      recorderChunksRef.current = []
+      setCaptureStage('idle')
+      setState('listening')
+      return
+    }
+
+    const parts = recorderChunksRef.current
+    recorderChunksRef.current = []
+
+    if (!pending.accepted) {
+      setCaptureStage('idle')
+      setState('listening')
+      setLastError('Utterance is too short. Keep speaking a bit longer.')
+      return
+    }
+
+    if (parts.length === 0) {
+      setCaptureStage('idle')
+      setState('listening')
+      setLastError('No audio data was captured. Try speaking again.')
+      return
+    }
+
+    const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm'
+    const blob = new Blob(parts, { type: mimeType })
+    const url = URL.createObjectURL(blob)
+
+    setLastUtterance(previous => {
+      if (previous) {
+        URL.revokeObjectURL(previous.url)
+      }
+
+      return {
+        url,
+        mimeType,
+        durationMs: pending.durationMs,
+        sizeBytes: blob.size,
+        reason: pending.reason,
+        createdAtMs: Date.now(),
+        preset: activePresetRef.current,
+      }
+    })
+
+    setCaptureStage('idle')
+    setState('listening')
+  }, [])
+
+  const beginSpeechCapture = useCallback((atMs: number) => {
+    if (isMutedRef.current) return
+
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state !== 'inactive') return
+
+    utteranceTokenRef.current += 1
+    recorderChunksRef.current = []
+    pendingUtteranceRef.current = {
+      token: utteranceTokenRef.current,
+      sessionToken: sessionTokenRef.current,
+      startMs: atMs,
+      endMs: atMs,
+      durationMs: 0,
+      reason: 'silence',
+      accepted: false,
+    }
+
+    setLastError(null)
+    setCaptureStage('speaking')
+    setState('user_speaking')
+    recorder.start(200)
+  }, [])
+
+  const endSpeechCapture = useCallback(
+    (atMs: number, durationMs: number, reason: VadEndReason, accepted: boolean) => {
+      const recorder = mediaRecorderRef.current
+      const pending = pendingUtteranceRef.current
+
+      if (!pending || pending.token !== utteranceTokenRef.current) return
+
+      pendingUtteranceRef.current = {
+        ...pending,
+        endMs: atMs,
+        durationMs,
+        reason,
+        accepted,
+      }
+
+      setCaptureStage('finalizing')
+      setState('processing')
+
+      if (recorder?.state === 'recording') {
+        recorder.stop()
+        return
+      }
+
+      handleRecorderStop()
+    },
+    [handleRecorderStop],
+  )
+
+  const processVadFrame = useCallback(
+    (db: number, nowMs: number) => {
+      if (isMutedRef.current || micStatusRef.current !== 'ready') {
+        return
+      }
+
+      const event = vadRef.current.process(db, nowMs)
+      if (!event) return
+
+      if (event.type === 'speech_start') {
+        beginSpeechCapture(event.atMs)
+        return
+      }
+
+      endSpeechCapture(event.atMs, event.durationMs, event.reason, event.accepted)
+    },
+    [beginSpeechCapture, endSpeechCapture],
+  )
 
   const startMeterLoop = useCallback(() => {
     const analyser = analyserRef.current
@@ -113,17 +295,15 @@ export default function Home() {
       const db = rms > 0 ? 20 * Math.log10(rms) : -100
       const normalized = Math.max(0, Math.min(1, (db + 60) / 60))
 
-      setInputLevel(previous => previous * 0.75 + normalized * 0.25)
+      setInputLevel(previous => previous * 0.85 + normalized * 0.15)
+      processVadFrame(db, performance.now())
+
       rafRef.current = requestAnimationFrame(loop)
     }
 
-    stopLoop()
+    stopMeterLoop()
     rafRef.current = requestAnimationFrame(loop)
-  }, [stopLoop])
-
-  useEffect(() => {
-    isMutedRef.current = isMuted
-  }, [isMuted])
+  }, [processVadFrame, stopMeterLoop])
 
   const initializeMicrophone = useCallback(async () => {
     if (micRequestInFlightRef.current) return
@@ -142,6 +322,27 @@ export default function Home() {
 
       cleanupAudio()
 
+      if (typeof MediaRecorder === 'undefined') {
+        throw new Error('MediaRecorder API is unavailable in this browser')
+      }
+
+      const recorderMimeType = pickRecorderMimeType()
+      const recorder = recorderMimeType
+        ? new MediaRecorder(stream, { mimeType: recorderMimeType })
+        : new MediaRecorder(stream)
+
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) {
+          recorderChunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        handleRecorderStop()
+      }
+
+      mediaRecorderRef.current = recorder
+
       const audioContext = new AudioContext()
       if (audioContext.state === 'suspended') {
         await audioContext.resume()
@@ -159,6 +360,7 @@ export default function Home() {
       analyserRef.current = analyser
 
       setMicStatus('ready')
+      setCaptureStage('idle')
       if (!isMutedRef.current) {
         setState('listening')
       }
@@ -168,6 +370,7 @@ export default function Home() {
       const isPermissionError = err?.name === 'NotAllowedError' || err?.name === 'SecurityError'
 
       setMicStatus(isPermissionError ? 'denied' : 'error')
+      setCaptureStage('idle')
       setState('error')
       setLastError(
         isPermissionError
@@ -177,15 +380,26 @@ export default function Home() {
     } finally {
       micRequestInFlightRef.current = false
     }
-  }, [cleanupAudio, startMeterLoop])
+  }, [cleanupAudio, handleRecorderStop, startMeterLoop])
 
   const resetSession = useCallback(() => {
-    simulationTokenRef.current += 1
+    sessionTokenRef.current += 1
+    utteranceTokenRef.current += 1
+
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    }
+
+    recorderChunksRef.current = []
+    pendingUtteranceRef.current = null
+    vadRef.current.reset()
 
     setIsMuted(false)
     setInterruptionCount(0)
     setInputLevel(0)
-    resetMeasurements()
+    setCaptureStage('idle')
+    setLastError(null)
+    releaseUtteranceUrl()
 
     if (micStatus === 'ready') {
       setState('listening')
@@ -193,10 +407,11 @@ export default function Home() {
     }
 
     void initializeMicrophone()
-  }, [initializeMicrophone, micStatus, resetMeasurements])
+  }, [initializeMicrophone, micStatus, releaseUtteranceUrl])
 
   const toggleMute = useCallback(() => {
-    simulationTokenRef.current += 1
+    sessionTokenRef.current += 1
+    utteranceTokenRef.current += 1
 
     setIsMuted(previous => {
       const nextMuted = !previous
@@ -205,80 +420,38 @@ export default function Home() {
         if (state !== 'listening') {
           setInterruptionCount(count => count + 1)
         }
-        setState('listening')
-        setProcessingStage(null)
-        setInputLevel(0)
-      } else {
-        if (micStatus === 'ready') {
-          setState('listening')
-        } else {
-          void initializeMicrophone()
+
+        if (mediaRecorderRef.current?.state === 'recording') {
+          mediaRecorderRef.current.stop()
         }
+
+        recorderChunksRef.current = []
+        pendingUtteranceRef.current = null
+        vadRef.current.reset()
+
+        setState('listening')
+        setCaptureStage('idle')
+        setInputLevel(0)
+      } else if (micStatus !== 'ready') {
+        void initializeMicrophone()
+      } else {
+        setState('listening')
       }
 
       return nextMuted
     })
   }, [initializeMicrophone, micStatus, state])
 
-  const simulateTurn = useCallback(async () => {
-    if (micStatus !== 'ready' || isMuted) return
-
-    simulationTokenRef.current += 1
-    const token = simulationTokenRef.current
-    const startedAt = performance.now()
-
-    setLastError(null)
-    setState('user_speaking')
-    setLastUserText('Draft user transcript appears in runtime UI.')
-
-    await wait(450)
-    if (simulationTokenRef.current !== token || isMuted) return
-
-    setState('processing')
-
-    const sttStart = performance.now()
-    setProcessingStage('stt')
-    await wait(500)
-    if (simulationTokenRef.current !== token || isMuted) return
-    const sttMs = Math.round(performance.now() - sttStart)
-
-    const llmStart = performance.now()
-    setProcessingStage('llm')
-    await wait(550)
-    if (simulationTokenRef.current !== token || isMuted) return
-    const llmMs = Math.round(performance.now() - llmStart)
-
-    const ttsStart = performance.now()
-    setLastAssistantText('Assistant text appears before audio to reduce perceived latency.')
-    setProcessingStage('tts')
-    await wait(600)
-    if (simulationTokenRef.current !== token || isMuted) return
-    const ttsMs = Math.round(performance.now() - ttsStart)
-
-    setTurnMetrics({
-      sttMs,
-      llmMs,
-      ttsMs,
-      totalMs: Math.round(performance.now() - startedAt),
-    })
-
-    setProcessingStage(null)
-    setState('assistant_speaking')
-
-    await wait(900)
-    if (simulationTokenRef.current !== token || isMuted) return
-
-    setState('listening')
-  }, [isMuted, micStatus])
-
   useEffect(() => {
     void initializeMicrophone()
 
     return () => {
-      simulationTokenRef.current += 1
+      sessionTokenRef.current += 1
+      utteranceTokenRef.current += 1
       cleanupAudio()
+      releaseUtteranceUrl()
     }
-  }, [cleanupAudio, initializeMicrophone])
+  }, [cleanupAudio, initializeMicrophone, releaseUtteranceUrl])
 
   const stateVariant = useMemo(() => {
     if (state === 'error') return 'destructive'
@@ -294,14 +467,21 @@ export default function Home() {
     return 'outline'
   }, [micStatus])
 
+  const captureVariant = useMemo(() => {
+    if (captureStage === 'speaking') return 'default'
+    if (captureStage === 'finalizing') return 'secondary'
+    return 'outline'
+  }, [captureStage])
+
+  const activeConfig: VadConfig = VAD_PRESETS[activePreset]
   const visibleLevel = isMuted ? 0 : inputLevel
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 p-4 md:p-8">
       <Card>
         <CardHeader>
-          <CardTitle>Conversant - Stage 0 Shell</CardTitle>
-          <CardDescription>Baseline runtime UI for FSM, microphone level, and session controls.</CardDescription>
+          <CardTitle>Conversant - Stage 1 VAD</CardTitle>
+          <CardDescription>Energy-based VAD, utterance capture, and debug playback.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
           <Badge className="w-[170px] justify-center font-mono" variant={stateVariant}>
@@ -313,8 +493,8 @@ export default function Home() {
           <Badge className="w-[170px] justify-center font-mono" variant={isMuted ? 'destructive' : 'outline'}>
             mode: {isMuted ? 'muted' : 'active'}
           </Badge>
-          <Badge className="w-[170px] justify-center font-mono" variant="secondary">
-            stage: {processingStage ?? '---'}
+          <Badge className="w-[170px] justify-center font-mono" variant={captureVariant}>
+            capture: {captureStage}
           </Badge>
         </CardContent>
       </Card>
@@ -323,9 +503,9 @@ export default function Home() {
         <Card>
           <CardHeader>
             <CardTitle>Session Controls</CardTitle>
-            <CardDescription>Reset and pause/resume controls for the baseline loop.</CardDescription>
+            <CardDescription>Stable controls for session and microphone behavior.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <Button className="w-full" onClick={resetSession} variant="outline">
                 Reset Session
@@ -333,8 +513,8 @@ export default function Home() {
               <Button className="w-full" onClick={toggleMute} variant={isMuted ? 'secondary' : 'destructive'}>
                 Mute / Resume
               </Button>
-              <Button className="w-full" disabled={isMuted || micStatus !== 'ready'} onClick={simulateTurn}>
-                Simulate Turn
+              <Button className="w-full" disabled={isMuted || micStatus !== 'ready'} onClick={releaseUtteranceUrl}>
+                Clear Recording
               </Button>
               <Button
                 className="w-full"
@@ -351,7 +531,7 @@ export default function Home() {
               <p className="text-sm font-medium">Input level</p>
               <div className="h-2 w-full rounded bg-muted">
                 <div
-                  className="h-2 rounded bg-primary transition-[width] duration-100"
+                  className="h-2 rounded bg-primary transition-[width] duration-150"
                   style={{ width: `${Math.round(visibleLevel * 100)}%` }}
                 />
               </div>
@@ -359,13 +539,34 @@ export default function Home() {
                 {Math.round(visibleLevel * 100)}% {isMuted ? '(muted)' : ''}
               </p>
             </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">VAD preset</p>
+              <div className="grid grid-cols-3 gap-2">
+                {VAD_PRESET_ORDER.map(preset => (
+                  <Button
+                    className="w-full"
+                    key={preset}
+                    onClick={() => setPreset(preset)}
+                    size="sm"
+                    variant={activePreset === preset ? 'default' : 'outline'}
+                  >
+                    {preset}
+                  </Button>
+                ))}
+              </div>
+              <div className="rounded border bg-muted/30 p-3 text-xs text-muted-foreground">
+                threshold: {activeConfig.thresholdDb} dB | startHold: {activeConfig.startHoldMs} ms | endHold:{' '}
+                {activeConfig.endHoldMs} ms
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>Debug Panel</CardTitle>
-            <CardDescription>State, metrics, and runtime text for local testing.</CardDescription>
+            <CardDescription>Latest utterance metadata and local audio playback.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
@@ -373,30 +574,26 @@ export default function Home() {
               <span>{interruptionCount}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">STT ms</span>
-              <span>{turnMetrics.sttMs ?? '--'}</span>
+              <span className="text-muted-foreground">Last duration</span>
+              <span>{lastUtterance ? `${lastUtterance.durationMs} ms` : '--'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">LLM ms</span>
-              <span>{turnMetrics.llmMs ?? '--'}</span>
+              <span className="text-muted-foreground">Last size</span>
+              <span>{lastUtterance ? `${Math.round(lastUtterance.sizeBytes / 1024)} KB` : '--'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">TTS ms</span>
-              <span>{turnMetrics.ttsMs ?? '--'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Total ms</span>
-              <span>{turnMetrics.totalMs ?? '--'}</span>
+              <span className="text-muted-foreground">Capture reason</span>
+              <span>{lastUtterance?.reason ?? '--'}</span>
             </div>
 
             <div className="space-y-1 rounded border bg-muted/30 p-3">
-              <p className="text-xs font-medium uppercase text-muted-foreground">User text (runtime)</p>
-              <p>{lastUserText || '--'}</p>
-            </div>
-
-            <div className="space-y-1 rounded border bg-muted/30 p-3">
-              <p className="text-xs font-medium uppercase text-muted-foreground">Assistant text (runtime)</p>
-              <p>{lastAssistantText || '--'}</p>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Last recording</p>
+              {lastUtterance ? (
+                // biome-ignore lint/a11y/useMediaCaption: Debug playback for raw user recording has no caption track in stage 1.
+                <audio className="w-full" controls preload="metadata" src={lastUtterance.url} />
+              ) : (
+                <p className="text-muted-foreground">No utterance captured yet.</p>
+              )}
             </div>
 
             {lastError ? (
