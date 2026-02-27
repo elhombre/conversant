@@ -1,0 +1,34 @@
+{
+  "name": "conversant",
+  "private": true,
+  "packageManager": "yarn@4.9.4",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "turbo run format",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test",
+    "vercel:install": "yarn install --immutable && PRISMA_CLI_BINARY_TARGETS=rhel-openssl-3.0.x yarn workspace @conversant/backend-data prisma:generate",
+    "vercel:build": "yarn workspace frontend build && node scripts/vercel/copy-prisma-engine.mjs",
+    "db:generate": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:generate",
+    "db:migrate:dev": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:migrate:dev",
+    "db:migrate:deploy": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:migrate:deploy",
+    "db:studio": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:studio",
+    "invite:generate": "yarn workspace @conversant/invite-tools generate"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "dotenv-cli": "^11.0.0",
+    "turbo": "^2.8.12",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@conversant/api-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "biome check",
+    "format": "biome format --write",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4",
+    "typescript": "^5"
+  }
+}

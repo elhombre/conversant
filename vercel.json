@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "if [ -f scripts/vercel/install.sh ]; then bash scripts/vercel/install.sh; else bash ../../scripts/vercel/install.sh; fi",
+  "buildCommand": "if [ -f scripts/vercel/build.sh ]; then bash scripts/vercel/build.sh; else bash ../../scripts/vercel/build.sh; fi"
+}
