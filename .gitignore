@@ -1,0 +1,10 @@
+.*
+*.lock
+build
+dist
+!.github
+!.github/**
+!.gitignore
+!.yarnrc.yml
+!**/.env.example
+!yarn.lock
