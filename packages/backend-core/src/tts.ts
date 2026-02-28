@@ -1,3 +1,5 @@
+import { type TtsRequestBody, VOICE_IDS, type VoiceId } from '@conversant/api-contracts'
+
 import { createRequestSignal, getAbortKind } from './shared/abort'
 import { jsonError } from './shared/http'
 import { createOpenAIClient, getOpenAIProviderConfig } from './shared/openai-client'
@@ -13,21 +15,13 @@ import { asRecord, readNonEmptyString } from './shared/parsing'
 const TTS_TIMEOUT_MS = 15_000
 const MAX_TTS_TEXT_CHARS = 4_000
 
-type VoiceId = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'
-
-type TtsBody = {
-  turnId: string
-  text: string
-  voice: VoiceId
-}
-
-const SUPPORTED_VOICES: ReadonlySet<VoiceId> = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'])
+const SUPPORTED_VOICES: ReadonlySet<string> = new Set(VOICE_IDS)
 
 function isVoiceId(value: string): value is VoiceId {
-  return SUPPORTED_VOICES.has(value as VoiceId)
+  return SUPPORTED_VOICES.has(value)
 }
 
-function parseBody(rawBody: unknown): TtsBody | null {
+function parseBody(rawBody: unknown): TtsRequestBody | null {
   const body = asRecord(rawBody)
   if (!body) {
     return null

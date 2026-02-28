@@ -1,3 +1,5 @@
+import { type ChatRequestBody, PERSONA_IDS, type PersonaId } from '@conversant/api-contracts'
+
 import { createRequestSignal, getAbortKind } from './shared/abort'
 import { jsonError } from './shared/http'
 import { createOpenAIClient, getOpenAIProviderConfig } from './shared/openai-client'
@@ -13,14 +15,6 @@ import { asRecord, readNonEmptyString } from './shared/parsing'
 const CHAT_TIMEOUT_MS = 15_000
 const CHAT_MAX_TOKENS = 220
 
-type PersonaId = 'Concise' | 'Conversational' | 'Interviewer'
-
-type ChatBody = {
-  turnId: string
-  text: string
-  personaId?: PersonaId
-}
-
 const PERSONA_SYSTEM_PROMPTS: Record<PersonaId, string> = {
   Concise:
     'You are a concise voice assistant. Respond with one short, clear answer in 1-2 sentences unless user asks for detail.',
@@ -31,10 +25,10 @@ const PERSONA_SYSTEM_PROMPTS: Record<PersonaId, string> = {
 }
 
 function isPersonaId(value: string): value is PersonaId {
-  return value in PERSONA_SYSTEM_PROMPTS
+  return PERSONA_IDS.some(persona => persona === value)
 }
 
-function parseBody(rawBody: unknown): ChatBody | null {
+function parseBody(rawBody: unknown): ChatRequestBody | null {
   const body = asRecord(rawBody)
   if (!body) {
     return null

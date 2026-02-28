@@ -1,3 +1,5 @@
+import { STT_LANGUAGE_CODES, type SttLanguageCode, type SttMeta } from '@conversant/api-contracts'
+
 import { createRequestSignal, getAbortKind } from './shared/abort'
 import { jsonError } from './shared/http'
 import { createOpenAIClient, getOpenAIProviderConfig } from './shared/openai-client'
@@ -13,17 +15,9 @@ import { asRecord, readNonEmptyString } from './shared/parsing'
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const STT_TIMEOUT_MS = 12_000
 
-type SttMeta = {
-  turnId: string
-  preset?: string
-  durationMs?: number
-  sttLanguageMode?: 'off' | 'strict'
-  allowedLanguages?: string[]
-}
+const SUPPORTED_STT_LANGUAGES = new Set<string>(STT_LANGUAGE_CODES)
 
-const SUPPORTED_STT_LANGUAGES = new Set(['en', 'ru', 'es', 'de', 'fr', 'it', 'pt', 'tr', 'uk', 'pl'])
-
-const LANGUAGE_ALIASES: Record<string, string> = {
+const LANGUAGE_ALIASES: Record<string, SttLanguageCode> = {
   english: 'en',
   russian: 'ru',
   spanish: 'es',
@@ -36,7 +30,11 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   polish: 'pl',
 }
 
-function normalizeLanguage(value: string): string | null {
+function isSttLanguageCode(value: string): value is SttLanguageCode {
+  return SUPPORTED_STT_LANGUAGES.has(value)
+}
+
+function normalizeLanguage(value: string): SttLanguageCode | null {
   const raw = value.trim().toLowerCase()
   if (raw.length === 0) {
     return null
@@ -46,19 +44,19 @@ function normalizeLanguage(value: string): string | null {
     return LANGUAGE_ALIASES[raw]
   }
 
-  if (SUPPORTED_STT_LANGUAGES.has(raw)) {
+  if (isSttLanguageCode(raw)) {
     return raw
   }
 
   const bcp47Code = raw.split(/[-_]/)[0]
-  if (SUPPORTED_STT_LANGUAGES.has(bcp47Code)) {
+  if (isSttLanguageCode(bcp47Code)) {
     return bcp47Code
   }
 
   return null
 }
 
-function readDetectedLanguage(payload: unknown): string | null {
+function readDetectedLanguage(payload: unknown): SttLanguageCode | null {
   const data = asRecord(payload)
   if (!data) {
     return null
@@ -103,7 +101,7 @@ function parseMeta(rawMeta: FormDataEntryValue | null): SttMeta | null {
           data.allowedLanguages
             .filter((value): value is string => typeof value === 'string')
             .map(value => normalizeLanguage(value))
-            .filter((value): value is string => value !== null),
+            .filter((value): value is SttLanguageCode => value !== null),
         ),
       ]
     : undefined
@@ -202,7 +200,7 @@ export async function handleSttPost(request: Request) {
 
   try {
     const isStrictMultiLanguage = sttLanguageMode === 'strict' && allowedLanguages.length > 1
-    let detectedLanguage: string | null = null
+    let detectedLanguage: SttLanguageCode | null = null
 
     if (isStrictMultiLanguage) {
       let detectionResult: unknown

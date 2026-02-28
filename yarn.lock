@@ -437,11 +437,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@conversant/api-contracts@workspace:*, @conversant/api-contracts@workspace:packages/api-contracts":
+  version: 0.0.0-use.local
+  resolution: "@conversant/api-contracts@workspace:packages/api-contracts"
+  dependencies:
+    "@biomejs/biome": "npm:2.4.4"
+    typescript: "npm:^5"
+  languageName: unknown
+  linkType: soft
+
 "@conversant/backend-core@workspace:*, @conversant/backend-core@workspace:packages/backend-core":
   version: 0.0.0-use.local
   resolution: "@conversant/backend-core@workspace:packages/backend-core"
   dependencies:
     "@biomejs/biome": "npm:2.4.4"
+    "@conversant/api-contracts": "workspace:*"
     "@types/node": "npm:^20"
     openai: "npm:^6.25.0"
     typescript: "npm:^5"
@@ -454,6 +464,7 @@ __metadata:
   resolution: "@conversant/conversation-engine@workspace:packages/conversation-engine"
   dependencies:
     "@biomejs/biome": "npm:2.4.4"
+    "@conversant/api-contracts": "workspace:*"
     "@types/react": "npm:^19"
     typescript: "npm:^5"
   peerDependencies:

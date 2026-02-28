@@ -1,61 +1,16 @@
-import type { PersonaId } from './engine-types'
+import type {
+  ChatErrorCode,
+  ChatErrorPayload,
+  SttErrorCode,
+  SttErrorPayload,
+  TtsErrorCode,
+  TtsErrorPayload,
+} from '@conversant/api-contracts'
 
 export const TOTAL_TURN_SOFT_TIMEOUT_MS = 30_000
 export const STT_REQUEST_TIMEOUT_MS = 12_000
 export const CHAT_REQUEST_TIMEOUT_MS = 15_000
 export const TTS_REQUEST_TIMEOUT_MS = 15_000
-
-type SttErrorCode =
-  | 'BadAudioFormat'
-  | 'PayloadTooLarge'
-  | 'UnsupportedLanguage'
-  | 'NoSpeechDetected'
-  | 'Timeout'
-  | 'Cancelled'
-  | 'ProviderUnavailable'
-  | 'InternalError'
-
-export type SttSuccessPayload = {
-  turnId: string
-  text: string
-  detectedLanguage?: string | null
-  latencyMs?: number
-}
-
-export type SttErrorPayload = {
-  turnId?: string | null
-  error?: {
-    code?: string
-    message?: string
-  }
-}
-
-type ChatErrorCode = 'BadRequest' | 'Timeout' | 'Cancelled' | 'ProviderUnavailable' | 'InternalError'
-
-export type ChatSuccessPayload = {
-  turnId: string
-  text: string
-  personaId?: PersonaId
-  latencyMs?: number
-}
-
-export type ChatErrorPayload = {
-  turnId?: string | null
-  error?: {
-    code?: string
-    message?: string
-  }
-}
-
-type TtsErrorCode = 'BadRequest' | 'Timeout' | 'Cancelled' | 'ProviderUnavailable' | 'InternalError'
-
-export type TtsErrorPayload = {
-  turnId?: string | null
-  error?: {
-    code?: string
-    message?: string
-  }
-}
 
 export function getSttErrorMessage(status: number, payload: SttErrorPayload | null) {
   const defaultMessages: Record<SttErrorCode, string> = {

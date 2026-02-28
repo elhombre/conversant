@@ -1,11 +1,15 @@
-import type { PendingUtteranceMeta, PersonaId, SttLanguageCode, SttLanguageMode, VoiceId } from './engine-types'
 import type {
   ChatErrorPayload,
+  ChatRequestBody,
   ChatSuccessPayload,
   SttErrorPayload,
+  SttMeta,
   SttSuccessPayload,
   TtsErrorPayload,
-} from './turn-pipeline'
+  TtsRequestBody,
+} from '@conversant/api-contracts'
+
+import type { PendingUtteranceMeta, PersonaId, SttLanguageCode, SttLanguageMode, VoiceId } from './engine-types'
 
 type ApiSuccess<TPayload> = {
   ok: true
@@ -60,17 +64,19 @@ export async function requestChatTurn({
   personaId: PersonaId
   signal: AbortSignal
 }): Promise<ApiSuccess<ChatSuccessPayload> | ApiFailure<ChatErrorPayload>> {
+  const body: ChatRequestBody = {
+    turnId,
+    text: transcript,
+    personaId,
+  }
+
   const startedAt = performance.now()
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({
-      turnId,
-      text: transcript,
-      personaId,
-    }),
+    body: JSON.stringify(body),
     signal,
   })
   const elapsedMs = Math.round(performance.now() - startedAt)
@@ -113,17 +119,16 @@ export async function requestSttTurn({
   const fileType = blob.type.length > 0 ? blob.type : 'audio/webm'
   const audioFile = new File([blob], fileName, { type: fileType })
 
+  const meta: SttMeta = {
+    turnId,
+    preset: pending.preset,
+    durationMs: pending.durationMs,
+    sttLanguageMode,
+    allowedLanguages,
+  }
+
   formData.append('audio', audioFile)
-  formData.append(
-    'meta',
-    JSON.stringify({
-      turnId,
-      preset: pending.preset,
-      durationMs: pending.durationMs,
-      sttLanguageMode,
-      allowedLanguages,
-    }),
-  )
+  formData.append('meta', JSON.stringify(meta))
 
   const startedAt = performance.now()
   const response = await fetch('/api/stt', {
@@ -162,17 +167,19 @@ export async function requestTtsTurn({
   voice: VoiceId
   signal: AbortSignal
 }): Promise<TtsSuccess | TtsFailure> {
+  const body: TtsRequestBody = {
+    turnId,
+    text,
+    voice,
+  }
+
   const startedAt = performance.now()
   const response = await fetch('/api/tts', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({
-      turnId,
-      text,
-      voice,
-    }),
+    body: JSON.stringify(body),
     signal,
   })
   const elapsedMs = Math.round(performance.now() - startedAt)

@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@conversant/api-contracts": "workspace:*",
     "openai": "^6.25.0"
   },
   "devDependencies": {
