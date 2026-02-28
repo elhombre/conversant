@@ -39,6 +39,13 @@ export class EnergyVad {
     return this.state.speaking
   }
 
+  forceSpeechStart(atMs: number) {
+    this.state.speaking = true
+    this.state.aboveSinceMs = atMs
+    this.state.belowSinceMs = null
+    this.state.speechStartMs = atMs
+  }
+
   process(db: number, nowMs: number): VadEvent | null {
     const { thresholdDb, startHoldMs, endHoldMs, minSpeechMs, maxUtteranceMs } = this.config
 

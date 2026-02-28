@@ -112,6 +112,10 @@ const STT_LANGUAGE_LABELS: Record<SttLanguageCode, string> = {
 }
 const PRE_TRIGGER_DB_MARGIN = 10
 const MAX_TENTATIVE_CAPTURE_MS = 1_200
+const BARGE_IN_MIC_BOOST_DB = 2
+const BARGE_IN_PLAYBACK_DELTA_DB = -6
+const BARGE_IN_ECHO_SUPPRESS_DB = 10
+const BARGE_IN_HOLD_MS = 90
 
 function pickRecorderMimeType() {
   if (typeof MediaRecorder === 'undefined') return null
@@ -132,6 +136,17 @@ function createTurnId() {
   }
 
   return `turn-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`
+}
+
+function calculateDbFromTimeDomain(buffer: Uint8Array<ArrayBuffer>): number {
+  let sumSquares = 0
+  for (let i = 0; i < buffer.length; i += 1) {
+    const value = (buffer[i] - 128) / 128
+    sumSquares += value * value
+  }
+
+  const rms = Math.sqrt(sumSquares / buffer.length)
+  return rms > 0 ? 20 * Math.log10(rms) : -100
 }
 
 function getSttErrorMessage(status: number, payload: SttErrorPayload | null) {
@@ -268,8 +283,14 @@ export default function Home() {
   const chatAbortControllerRef = useRef<AbortController | null>(null)
   const ttsAbortControllerRef = useRef<AbortController | null>(null)
   const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const playbackAnalyserRef = useRef<AnalyserNode | null>(null)
+  const playbackMediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null)
   const playbackAudioUrlRef = useRef<string | null>(null)
+  const playbackSampleBufferRef = useRef<Uint8Array | null>(null)
+  const playbackDbRef = useRef(-100)
+  const stateRef = useRef<ConversationState>('listening')
+  const bargeInAboveSinceRef = useRef<number | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
   const vadRef = useRef(new EnergyVad(VAD_PRESETS.Normal))
 
@@ -315,6 +336,13 @@ export default function Home() {
   }, [micStatus])
 
   useEffect(() => {
+    stateRef.current = state
+    if (state !== 'assistant_speaking') {
+      bargeInAboveSinceRef.current = null
+    }
+  }, [state])
+
+  useEffect(() => {
     sttLanguageModeRef.current = sttLanguageMode
   }, [sttLanguageMode])
 
@@ -341,6 +369,18 @@ export default function Home() {
       playbackSourceRef.current = null
     }
 
+    const playbackAnalyser = playbackAnalyserRef.current
+    if (playbackAnalyser) {
+      playbackAnalyser.disconnect()
+      playbackAnalyserRef.current = null
+    }
+
+    const playbackMediaSource = playbackMediaSourceRef.current
+    if (playbackMediaSource) {
+      playbackMediaSource.disconnect()
+      playbackMediaSourceRef.current = null
+    }
+
     const audio = playbackAudioRef.current
     if (audio) {
       audio.onended = null
@@ -355,6 +395,9 @@ export default function Home() {
       URL.revokeObjectURL(audioUrl)
       playbackAudioUrlRef.current = null
     }
+
+    playbackSampleBufferRef.current = null
+    playbackDbRef.current = -100
   }, [])
 
   const abortTurnRequests = useCallback(() => {
@@ -539,13 +582,20 @@ export default function Home() {
 
               const source = currentContext.createBufferSource()
               source.buffer = decodedBuffer
-              source.connect(currentContext.destination)
+              const playbackAnalyser = currentContext.createAnalyser()
+              playbackAnalyser.fftSize = 1024
+              playbackAnalyser.smoothingTimeConstant = 0.8
+
+              source.connect(playbackAnalyser)
+              playbackAnalyser.connect(currentContext.destination)
+
               playbackSourceRef.current = source
+              playbackAnalyserRef.current = playbackAnalyser
+              playbackSampleBufferRef.current = null
+              playbackDbRef.current = -100
 
               const finalizePlayback = (nextState: ConversationState, message: string | null) => {
-                if (playbackSourceRef.current === source) {
-                  playbackSourceRef.current = null
-                }
+                stopPlayback()
 
                 const stillSameTurn = sessionTokenRef.current === sessionToken && activeTurnIdRef.current === turnId
                 if (!stillSameTurn) {
@@ -578,16 +628,31 @@ export default function Home() {
 
         playbackAudioRef.current = audio
         playbackAudioUrlRef.current = audioUrl
+        playbackDbRef.current = -100
+
+        const fallbackContext = contextRef.current
+        if (fallbackContext && fallbackContext.state === 'running') {
+          try {
+            const mediaSource = fallbackContext.createMediaElementSource(audio)
+            const playbackAnalyser = fallbackContext.createAnalyser()
+            playbackAnalyser.fftSize = 1024
+            playbackAnalyser.smoothingTimeConstant = 0.8
+
+            mediaSource.connect(playbackAnalyser)
+            playbackAnalyser.connect(fallbackContext.destination)
+
+            playbackMediaSourceRef.current = mediaSource
+            playbackAnalyserRef.current = playbackAnalyser
+            playbackSampleBufferRef.current = null
+          } catch {
+            playbackMediaSourceRef.current = null
+            playbackAnalyserRef.current = null
+            playbackSampleBufferRef.current = null
+          }
+        }
 
         const finalizePlayback = (nextState: ConversationState, message: string | null) => {
-          if (playbackAudioRef.current === audio) {
-            playbackAudioRef.current = null
-          }
-
-          if (playbackAudioUrlRef.current === audioUrl) {
-            URL.revokeObjectURL(audioUrl)
-            playbackAudioUrlRef.current = null
-          }
+          stopPlayback()
 
           const stillSameTurn = sessionTokenRef.current === sessionToken && activeTurnIdRef.current === turnId
           if (!stillSameTurn) {
@@ -1072,12 +1137,43 @@ export default function Home() {
         return
       }
 
+      const thresholdDb = VAD_PRESETS[activePresetRef.current].thresholdDb
+      const isAssistantSpeaking = stateRef.current === 'assistant_speaking'
+      if (isAssistantSpeaking) {
+        const playbackDb = playbackDbRef.current
+        const playbackIsActive = playbackDb > -85
+        const micBoostReached = db >= thresholdDb + BARGE_IN_MIC_BOOST_DB
+        const playbackDominatesMic = playbackIsActive && playbackDb - db >= BARGE_IN_ECHO_SUPPRESS_DB
+        const deltaMatches = db - playbackDb >= BARGE_IN_PLAYBACK_DELTA_DB
+
+        const isLikelyBargeIn = micBoostReached && !playbackDominatesMic && (!playbackIsActive || deltaMatches)
+
+        if (isLikelyBargeIn) {
+          if (bargeInAboveSinceRef.current === null) {
+            bargeInAboveSinceRef.current = nowMs
+            return
+          }
+
+          if (nowMs - bargeInAboveSinceRef.current >= BARGE_IN_HOLD_MS) {
+            bargeInAboveSinceRef.current = null
+            setInterruptionCount(count => count + 1)
+            setLastError(null)
+            abortTurnRequests()
+            vadRef.current.reset()
+            vadRef.current.forceSpeechStart(nowMs)
+            startSpeechCapture(nowMs, true)
+          }
+        } else {
+          bargeInAboveSinceRef.current = null
+        }
+        return
+      }
+
       if (activeTurnIdRef.current) {
         return
       }
 
       const pending = pendingUtteranceRef.current
-      const thresholdDb = VAD_PRESETS[activePresetRef.current].thresholdDb
       const preTriggerDb = thresholdDb - PRE_TRIGGER_DB_MARGIN
 
       if (!pending && db >= preTriggerDb) {
@@ -1099,7 +1195,7 @@ export default function Home() {
 
       endSpeechCapture(event.atMs, event.durationMs, event.reason, event.accepted)
     },
-    [cancelTentativeCapture, confirmSpeechCapture, endSpeechCapture, startSpeechCapture],
+    [abortTurnRequests, cancelTentativeCapture, confirmSpeechCapture, endSpeechCapture, startSpeechCapture],
   )
 
   const startMeterLoop = useCallback(() => {
@@ -1116,16 +1212,21 @@ export default function Home() {
       if (!buffer || !meterAnalyser) return
 
       meterAnalyser.getByteTimeDomainData(buffer as Uint8Array<ArrayBuffer>)
-
-      let sumSquares = 0
-      for (let i = 0; i < buffer.length; i += 1) {
-        const value = (buffer[i] - 128) / 128
-        sumSquares += value * value
-      }
-
-      const rms = Math.sqrt(sumSquares / buffer.length)
-      const db = rms > 0 ? 20 * Math.log10(rms) : -100
+      const db = calculateDbFromTimeDomain(buffer as Uint8Array<ArrayBuffer>)
       const normalized = Math.max(0, Math.min(1, (db + 60) / 60))
+
+      const playbackAnalyser = playbackAnalyserRef.current
+      if (playbackAnalyser) {
+        if (!playbackSampleBufferRef.current || playbackSampleBufferRef.current.length !== playbackAnalyser.fftSize) {
+          playbackSampleBufferRef.current = new Uint8Array(new ArrayBuffer(playbackAnalyser.fftSize))
+        }
+
+        const playbackBuffer = playbackSampleBufferRef.current
+        playbackAnalyser.getByteTimeDomainData(playbackBuffer as Uint8Array<ArrayBuffer>)
+        playbackDbRef.current = calculateDbFromTimeDomain(playbackBuffer as Uint8Array<ArrayBuffer>)
+      } else {
+        playbackDbRef.current = -100
+      }
 
       setInputLevel(previous => previous * 0.85 + normalized * 0.15)
       processVadFrame(db, performance.now())
