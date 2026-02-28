@@ -1,3 +1,4 @@
+import type { ChatHistoryMessage } from '@conversant/api-contracts'
 import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useRef } from 'react'
 import { EnergyVad } from '../vad/energy-vad'
@@ -76,6 +77,7 @@ export function useConversationRuntime({
   const utteranceTokenRef = useRef(0)
   const sessionTokenRef = useRef(0)
   const conversationIdRef = useRef('')
+  const conversationHistoryRef = useRef<ChatHistoryMessage[]>([])
   const micRequestInFlightRef = useRef(false)
   const isMutedRef = useRef(false)
   const micStatusRef = useRef<MicStatus>('idle')
@@ -365,6 +367,7 @@ export function useConversationRuntime({
       utteranceTokenRef.current += 1
       const nextConversationId = createConversationId()
       conversationIdRef.current = nextConversationId
+      conversationHistoryRef.current = []
       setConversationId(nextConversationId)
 
       abortTurnRequests()
@@ -479,6 +482,7 @@ export function useConversationRuntime({
     utteranceTokenRef,
     sessionTokenRef,
     conversationIdRef,
+    conversationHistoryRef,
     micRequestInFlightRef,
     isMutedRef,
     micStatusRef,

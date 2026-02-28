@@ -1,3 +1,4 @@
+import type { ChatHistoryMessage } from '@conversant/api-contracts'
 import { useCallback } from 'react'
 
 import type { PendingUtteranceMeta } from './engine-types'
@@ -14,6 +15,8 @@ import {
   TTS_REQUEST_TIMEOUT_MS,
 } from './turn-pipeline'
 import type { TurnRuntime } from './turn-runtime'
+
+const MAX_CLIENT_CHAT_HISTORY_MESSAGES = 24
 
 function hasTextPayload(
   payload: unknown,
@@ -121,6 +124,7 @@ export function useTurnHandlers(runtime: TurnRuntime) {
           turnId,
           transcript,
           personaId: runtime.activePersonaRef.current,
+          history: runtime.conversationHistoryRef.current,
           signal: controller.signal,
         })
 
@@ -150,6 +154,18 @@ export function useTurnHandlers(runtime: TurnRuntime) {
         runtime.setLlmLatencyMs(
           typeof result.payload.latencyMs === 'number' ? result.payload.latencyMs : result.elapsedMs,
         )
+        const nextHistory: ChatHistoryMessage[] = [
+          ...runtime.conversationHistoryRef.current,
+          {
+            role: 'user',
+            content: transcript,
+          },
+          {
+            role: 'assistant',
+            content: result.payload.text,
+          },
+        ]
+        runtime.conversationHistoryRef.current = nextHistory.slice(-MAX_CLIENT_CHAT_HISTORY_MESSAGES)
         runtime.setState('processing')
         runtime.setCaptureStage('finalizing')
 

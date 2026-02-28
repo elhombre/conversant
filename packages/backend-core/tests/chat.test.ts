@@ -233,4 +233,64 @@ describe('handleChatPost', () => {
     expect(latestUser.role).toBe('user')
     expect(latestUser.content).toBe('Second question')
   })
+
+  it('uses client-provided history when server conversation memory is empty', async () => {
+    const chatCreateMock = vi.fn(async () => ({
+      choices: [
+        {
+          message: {
+            content: 'Using fallback history',
+          },
+        },
+      ],
+    }))
+
+    const mockClient = {
+      chat: {
+        completions: {
+          create: chatCreateMock,
+        },
+      },
+    }
+
+    vi.mocked(createOpenAIClient).mockReturnValue(mockClient as unknown as OpenAIClient)
+
+    const response = await handleChatPost(
+      createJsonRequest('http://localhost/api/chat', {
+        conversationId: 'fallback-history-c-1',
+        turnId: 'fh-1',
+        text: 'What did I ask before?',
+        history: [
+          {
+            role: 'user',
+            content: 'Remember this fact',
+          },
+          {
+            role: 'assistant',
+            content: 'I remember this fact',
+          },
+        ],
+      }),
+    )
+
+    expect(response.status).toBe(200)
+
+    const callArgs = chatCreateMock.mock.calls[0]
+    expect(callArgs).toBeDefined()
+    const requestPayload = asRecord(callArgs?.[0])
+    const messages = requestPayload.messages as unknown[]
+    expect(Array.isArray(messages)).toBe(true)
+    expect(messages).toHaveLength(4)
+
+    const historyUser = asRecord(messages[1])
+    const historyAssistant = asRecord(messages[2])
+    const latestUser = asRecord(messages[3])
+
+    expect(historyUser.role).toBe('user')
+    expect(historyUser.content).toBe('Remember this fact')
+    expect(historyAssistant.role).toBe('assistant')
+    expect(historyAssistant.content).toBe('I remember this fact')
+    expect(latestUser.role).toBe('user')
+    expect(latestUser.content).toBe('What did I ask before?')
+  })
 })

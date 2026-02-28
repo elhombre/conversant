@@ -1,5 +1,6 @@
 import type {
   ChatErrorPayload,
+  ChatHistoryMessage,
   ChatRequestBody,
   ChatSuccessPayload,
   SessionResetRequestBody,
@@ -59,12 +60,14 @@ export async function requestChatTurn({
   turnId,
   transcript,
   personaId,
+  history,
   signal,
 }: {
   conversationId: string
   turnId: string
   transcript: string
   personaId: PersonaId
+  history: ChatHistoryMessage[]
   signal: AbortSignal
 }): Promise<ApiSuccess<ChatSuccessPayload> | ApiFailure<ChatErrorPayload>> {
   const body: ChatRequestBody = {
@@ -72,6 +75,7 @@ export async function requestChatTurn({
     turnId,
     text: transcript,
     personaId,
+    ...(history.length > 0 ? { history } : {}),
   }
 
   const startedAt = performance.now()

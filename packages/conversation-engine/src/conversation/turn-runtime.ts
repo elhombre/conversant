@@ -1,3 +1,4 @@
+import type { ChatHistoryMessage } from '@conversant/api-contracts'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 
 import type {
@@ -13,6 +14,7 @@ import type {
 export type TurnRuntime = {
   activeTurnIdRef: RefObject<string | null>
   conversationIdRef: RefObject<string>
+  conversationHistoryRef: RefObject<ChatHistoryMessage[]>
   activeVoiceRef: RefObject<VoiceId>
   activePersonaRef: RefObject<PersonaId>
   sessionTokenRef: RefObject<number>

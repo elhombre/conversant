@@ -32,11 +32,17 @@ type ErrorEnvelope<Code extends string> = {
   }
 }
 
+export type ChatHistoryMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export type ChatRequestBody = {
   conversationId: string
   turnId: string
   text: string
   personaId?: PersonaId
+  history?: ChatHistoryMessage[]
 }
 
 export type ChatSuccessPayload = {

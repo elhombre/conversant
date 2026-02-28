@@ -60,6 +60,7 @@ export function useConversationEngine() {
     utteranceTokenRef,
     sessionTokenRef,
     conversationIdRef,
+    conversationHistoryRef,
     isMutedRef,
     micStatusRef,
     activePresetRef,
@@ -104,6 +105,7 @@ export function useConversationEngine() {
     () => ({
       activeTurnIdRef,
       conversationIdRef,
+      conversationHistoryRef,
       activeVoiceRef,
       activePersonaRef,
       sessionTokenRef,
@@ -141,6 +143,7 @@ export function useConversationEngine() {
     [
       activeTurnIdRef,
       conversationIdRef,
+      conversationHistoryRef,
       activeVoiceRef,
       activePersonaRef,
       sessionTokenRef,
