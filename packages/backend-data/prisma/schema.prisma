@@ -1,0 +1,106 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  invite
+  authjs
+  clerk
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+model User {
+  id             String         @id @default(cuid())
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  lastSeenAt     DateTime?
+  identities     AuthIdentity[]
+  sessions       Session[]
+  conversations  Conversation[]
+  invitesCreated InviteToken[]  @relation("InviteCreatedBy")
+  invitesUsed    InviteToken[]  @relation("InviteUsedBy")
+}
+
+model AuthIdentity {
+  id             String       @id @default(cuid())
+  userId         String
+  provider       AuthProvider
+  providerUserId String
+  email          String?
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  lastSeenAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Conversation {
+  id               String    @id
+  userId           String
+  startedAt        DateTime  @default(now())
+  endedAt          DateTime?
+  durationLimitSec Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages         Message[]
+
+  @@index([userId, createdAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  turnId         String?
+  model          String?
+  latencyMs      Int?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, turnId])
+}
+
+model InviteToken {
+  id              String    @id @default(cuid())
+  tokenHash       String    @unique
+  note            String?
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime
+  usedAt          DateTime?
+  revokedAt       DateTime?
+  createdByUserId String?
+  usedByUserId    String?
+  createdBy       User?     @relation("InviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  usedBy          User?     @relation("InviteUsedBy", fields: [usedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt, usedAt, revokedAt])
+}

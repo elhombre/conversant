@@ -21,6 +21,8 @@
       "!**/out",
       "!**/build",
       "!**/dist",
+      "!**/src/generated",
+      "!**/src/generated/**",
       "!**/coverage",
       "!**/next-env.d.ts"
     ]
