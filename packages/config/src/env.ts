@@ -58,6 +58,24 @@ function readOptionalPositiveInteger(env: EnvSource, key: string): number | null
   return parsed
 }
 
+function readBoolean(env: EnvSource, key: string, fallback = false): boolean {
+  const raw = readNonEmptyString(env, key)
+  if (!raw) {
+    return fallback
+  }
+
+  const normalized = raw.toLowerCase()
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') {
+    return true
+  }
+
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') {
+    return false
+  }
+
+  return fallback
+}
+
 export type OpenAIProviderEnv = {
   apiKey: string
   baseURL?: string
@@ -145,6 +163,11 @@ export function readAssistantRuntimeEnv(env?: EnvSource): AssistantRuntimeEnv {
     assistantSystemPrompt: readNonEmptyString(source, 'ASSISTANT_SYSTEM_PROMPT'),
     assistantMaxOutputTokens: Math.min(assistantMaxOutputTokens, MAX_ASSISTANT_OUTPUT_TOKENS),
   }
+}
+
+export function isPublicAccessEnabled(env?: EnvSource): boolean {
+  const source = resolveEnv(env)
+  return readBoolean(source, 'ALLOW_PUBLIC_ACCESS', false)
 }
 
 export function isProductionEnv(env?: EnvSource): boolean {

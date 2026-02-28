@@ -1,6 +1,11 @@
 import type { InviteConsumeFailureReason, InviteConsumeResult } from '@conversant/backend-data'
-import { consumeInviteToken, resolveSessionUser, revokeSessionByToken } from '@conversant/backend-data'
-import { isProductionEnv } from '@conversant/config'
+import {
+  consumeInviteToken,
+  resolveOrCreatePublicAccessUser,
+  resolveSessionUser,
+  revokeSessionByToken,
+} from '@conversant/backend-data'
+import { isProductionEnv, isPublicAccessEnabled } from '@conversant/config'
 import type { NextResponse } from 'next/server'
 import { SESSION_COOKIE_NAME } from './constants'
 
@@ -73,6 +78,14 @@ export function clearSessionCookie(response: NextResponse) {
 }
 
 export async function requireAuthenticatedUser(request: Request): Promise<AuthResult> {
+  if (isPublicAccessEnabled()) {
+    const publicAccessUser = await resolveOrCreatePublicAccessUser()
+    return {
+      ok: true,
+      userId: publicAccessUser.userId,
+    }
+  }
+
   const token = readSessionTokenFromRequest(request)
   if (!token) {
     return {

@@ -3,6 +3,7 @@ export {
   consumeInviteToken,
   consumeSessionPageAccess,
   issueInviteToken,
+  resolveOrCreatePublicAccessUser,
   resolveSessionUser,
   revokeSessionByToken,
 } from './auth'

@@ -3,6 +3,7 @@ import { readInviteAdminSecret, readInviteSessionEnv } from '@conversant/config'
 import { prisma } from './client'
 
 const DEFAULT_INVITE_TTL_HOURS = 24 * 7
+const PUBLIC_ACCESS_PROVIDER_USER_ID = 'public-access'
 
 export type InviteConsumeFailureReason =
   | 'invalid_token'
@@ -353,5 +354,59 @@ export async function revokeSessionByToken(token: string): Promise<void> {
     data: {
       revokedAt: new Date(),
     },
+  })
+}
+
+export async function resolveOrCreatePublicAccessUser(): Promise<{ userId: string }> {
+  const now = new Date()
+
+  return prisma.$transaction(async tx => {
+    const existing = await tx.authIdentity.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: 'authjs',
+          providerUserId: PUBLIC_ACCESS_PROVIDER_USER_ID,
+        },
+      },
+      select: {
+        userId: true,
+      },
+    })
+
+    if (existing) {
+      await tx.user.update({
+        where: {
+          id: existing.userId,
+        },
+        data: {
+          lastSeenAt: now,
+        },
+      })
+
+      return {
+        userId: existing.userId,
+      }
+    }
+
+    const user = await tx.user.create({
+      data: {
+        lastSeenAt: now,
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    await tx.authIdentity.create({
+      data: {
+        userId: user.id,
+        provider: 'authjs',
+        providerUserId: PUBLIC_ACCESS_PROVIDER_USER_ID,
+      },
+    })
+
+    return {
+      userId: user.id,
+    }
   })
 }
