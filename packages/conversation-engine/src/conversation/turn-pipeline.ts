@@ -39,6 +39,10 @@ export function getSttErrorMessage(status: number, payload: SttErrorPayload | nu
     return defaultMessages.ProviderUnavailable
   }
 
+  if (status === 401) {
+    return 'Authentication required. Open a valid invite link.'
+  }
+
   if (status === 422) {
     return defaultMessages.NoSpeechDetected
   }
@@ -93,6 +97,10 @@ export function getChatErrorMessage(status: number, payload: ChatErrorPayload | 
     return defaultMessages.ProviderUnavailable
   }
 
+  if (status === 401) {
+    return 'Authentication required. Open a valid invite link.'
+  }
+
   return defaultMessages.InternalError
 }
 
@@ -118,6 +126,10 @@ export function getTtsErrorMessage(status: number, payload: TtsErrorPayload | nu
 
   if (status >= 500) {
     return defaultMessages.ProviderUnavailable
+  }
+
+  if (status === 401) {
+    return 'Authentication required. Open a valid invite link.'
   }
 
   return defaultMessages.InternalError

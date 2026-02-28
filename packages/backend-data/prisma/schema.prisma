@@ -13,94 +13,106 @@ enum AuthProvider {
   invite
   authjs
   clerk
+
+  @@map("auth_provider")
 }
 
 enum MessageRole {
   user
   assistant
   system
+
+  @@map("message_role")
 }
 
 model User {
   id             String         @id @default(cuid())
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  lastSeenAt     DateTime?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  lastSeenAt     DateTime?      @map("last_seen_at")
   identities     AuthIdentity[]
   sessions       Session[]
   conversations  Conversation[]
   invitesCreated InviteToken[]  @relation("InviteCreatedBy")
   invitesUsed    InviteToken[]  @relation("InviteUsedBy")
+
+  @@map("users")
 }
 
 model AuthIdentity {
   id             String       @id @default(cuid())
-  userId         String
+  userId         String       @map("user_id")
   provider       AuthProvider
-  providerUserId String
+  providerUserId String       @map("provider_user_id")
   email          String?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime     @default(now()) @map("created_at")
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerUserId])
   @@index([userId])
+  @@map("auth_identities")
 }
 
 model Session {
-  id        String    @id @default(cuid())
-  userId    String
-  tokenHash String    @unique
-  createdAt DateTime  @default(now())
-  expiresAt DateTime
-  revokedAt DateTime?
-  lastSeenAt DateTime?
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  tokenHash       String    @unique @map("token_hash")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  expiresAt       DateTime  @map("expires_at")
+  revokedAt       DateTime? @map("revoked_at")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  entryConsumedAt DateTime? @map("entry_consumed_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+  @@map("sessions")
 }
 
 model Conversation {
-  id               String    @id
-  userId           String
-  startedAt        DateTime  @default(now())
-  endedAt          DateTime?
-  durationLimitSec Int?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String     @id
+  userId           String     @map("user_id")
+  startedAt        DateTime   @default(now()) @map("started_at")
+  endedAt          DateTime?  @map("ended_at")
+  durationLimitSec Int?       @map("duration_limit_sec")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages         Message[]
 
   @@index([userId, createdAt])
+  @@map("conversations")
 }
 
 model Message {
   id             String       @id @default(cuid())
-  conversationId String
+  conversationId String       @map("conversation_id")
   role           MessageRole
   content        String
-  turnId         String?
+  turnId         String?      @map("turn_id")
   model          String?
-  latencyMs      Int?
+  latencyMs      Int?         @map("latency_ms")
   metadata       Json?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime     @default(now()) @map("created_at")
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
   @@index([conversationId, turnId])
+  @@map("messages")
 }
 
 model InviteToken {
   id              String    @id @default(cuid())
-  tokenHash       String    @unique
+  tokenHash       String    @unique @map("token_hash")
   note            String?
-  createdAt       DateTime  @default(now())
-  expiresAt       DateTime
-  usedAt          DateTime?
-  revokedAt       DateTime?
-  createdByUserId String?
-  usedByUserId    String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  expiresAt       DateTime  @map("expires_at")
+  usedAt          DateTime? @map("used_at")
+  revokedAt       DateTime? @map("revoked_at")
+  createdByUserId String?   @map("created_by_user_id")
+  usedByUserId    String?   @map("used_by_user_id")
   createdBy       User?     @relation("InviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   usedBy          User?     @relation("InviteUsedBy", fields: [usedByUserId], references: [id], onDelete: SetNull)
 
   @@index([expiresAt, usedAt, revokedAt])
+  @@map("invite_tokens")
 }

@@ -2,131 +2,131 @@
 CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateEnum
-CREATE TYPE "AuthProvider" AS ENUM ('invite', 'authjs', 'clerk');
+CREATE TYPE "auth_provider" AS ENUM ('invite', 'authjs', 'clerk');
 
 -- CreateEnum
-CREATE TYPE "MessageRole" AS ENUM ('user', 'assistant', 'system');
+CREATE TYPE "message_role" AS ENUM ('user', 'assistant', 'system');
 
 -- CreateTable
-CREATE TABLE "User" (
+CREATE TABLE "users" (
     "id" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "lastSeenAt" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "last_seen_at" TIMESTAMP(3),
 
-    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "AuthIdentity" (
+CREATE TABLE "auth_identities" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "provider" "AuthProvider" NOT NULL,
-    "providerUserId" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "provider" "auth_provider" NOT NULL,
+    "provider_user_id" TEXT NOT NULL,
     "email" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "AuthIdentity_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "auth_identities_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "Session" (
+CREATE TABLE "sessions" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "tokenHash" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "revokedAt" TIMESTAMP(3),
-    "lastSeenAt" TIMESTAMP(3),
+    "user_id" TEXT NOT NULL,
+    "token_hash" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "revoked_at" TIMESTAMP(3),
+    "last_seen_at" TIMESTAMP(3),
 
-    CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "Conversation" (
+CREATE TABLE "conversations" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endedAt" TIMESTAMP(3),
-    "durationLimitSec" INTEGER,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "started_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "ended_at" TIMESTAMP(3),
+    "duration_limit_sec" INTEGER,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "Conversation_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "Message" (
+CREATE TABLE "messages" (
     "id" TEXT NOT NULL,
-    "conversationId" TEXT NOT NULL,
-    "role" "MessageRole" NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "role" "message_role" NOT NULL,
     "content" TEXT NOT NULL,
-    "turnId" TEXT,
+    "turn_id" TEXT,
     "model" TEXT,
-    "latencyMs" INTEGER,
+    "latency_ms" INTEGER,
     "metadata" JSONB,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "messages_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "InviteToken" (
+CREATE TABLE "invite_tokens" (
     "id" TEXT NOT NULL,
-    "tokenHash" TEXT NOT NULL,
+    "token_hash" TEXT NOT NULL,
     "note" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "usedAt" TIMESTAMP(3),
-    "revokedAt" TIMESTAMP(3),
-    "createdByUserId" TEXT,
-    "usedByUserId" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "used_at" TIMESTAMP(3),
+    "revoked_at" TIMESTAMP(3),
+    "created_by_user_id" TEXT,
+    "used_by_user_id" TEXT,
 
-    CONSTRAINT "InviteToken_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "invite_tokens_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE INDEX "AuthIdentity_userId_idx" ON "AuthIdentity"("userId");
+CREATE INDEX "auth_identities_user_id_idx" ON "auth_identities"("user_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "AuthIdentity_provider_providerUserId_key" ON "AuthIdentity"("provider", "providerUserId");
+CREATE UNIQUE INDEX "auth_identities_provider_provider_user_id_key" ON "auth_identities"("provider", "provider_user_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Session_tokenHash_key" ON "Session"("tokenHash");
+CREATE UNIQUE INDEX "sessions_token_hash_key" ON "sessions"("token_hash");
 
 -- CreateIndex
-CREATE INDEX "Session_userId_expiresAt_idx" ON "Session"("userId", "expiresAt");
+CREATE INDEX "sessions_user_id_expires_at_idx" ON "sessions"("user_id", "expires_at");
 
 -- CreateIndex
-CREATE INDEX "Conversation_userId_createdAt_idx" ON "Conversation"("userId", "createdAt");
+CREATE INDEX "conversations_user_id_created_at_idx" ON "conversations"("user_id", "created_at");
 
 -- CreateIndex
-CREATE INDEX "Message_conversationId_createdAt_idx" ON "Message"("conversationId", "createdAt");
+CREATE INDEX "messages_conversation_id_created_at_idx" ON "messages"("conversation_id", "created_at");
 
 -- CreateIndex
-CREATE INDEX "Message_conversationId_turnId_idx" ON "Message"("conversationId", "turnId");
+CREATE INDEX "messages_conversation_id_turn_id_idx" ON "messages"("conversation_id", "turn_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "InviteToken_tokenHash_key" ON "InviteToken"("tokenHash");
+CREATE UNIQUE INDEX "invite_tokens_token_hash_key" ON "invite_tokens"("token_hash");
 
 -- CreateIndex
-CREATE INDEX "InviteToken_expiresAt_usedAt_revokedAt_idx" ON "InviteToken"("expiresAt", "usedAt", "revokedAt");
+CREATE INDEX "invite_tokens_expires_at_used_at_revoked_at_idx" ON "invite_tokens"("expires_at", "used_at", "revoked_at");
 
 -- AddForeignKey
-ALTER TABLE "AuthIdentity" ADD CONSTRAINT "AuthIdentity_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "auth_identities" ADD CONSTRAINT "auth_identities_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "InviteToken" ADD CONSTRAINT "InviteToken_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "invite_tokens" ADD CONSTRAINT "invite_tokens_created_by_user_id_fkey" FOREIGN KEY ("created_by_user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "InviteToken" ADD CONSTRAINT "InviteToken_usedByUserId_fkey" FOREIGN KEY ("usedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "invite_tokens" ADD CONSTRAINT "invite_tokens_used_by_user_id_fkey" FOREIGN KEY ("used_by_user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 

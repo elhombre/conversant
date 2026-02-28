@@ -1,3 +1,11 @@
+export type { InviteConsumeFailureReason, InviteConsumeResult } from './auth'
+export {
+  consumeInviteToken,
+  consumeSessionPageAccess,
+  issueInviteToken,
+  resolveSessionUser,
+  revokeSessionByToken,
+} from './auth'
 export { prisma } from './client'
 
 export type {
