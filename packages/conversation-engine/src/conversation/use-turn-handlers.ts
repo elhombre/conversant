@@ -116,6 +116,7 @@ export function useTurnHandlers(runtime: TurnRuntime) {
 
       try {
         const result = await requestChatTurn({
+          conversationId: runtime.conversationIdRef.current,
           turnId,
           transcript,
           personaId: runtime.activePersonaRef.current,

@@ -58,6 +58,7 @@ async function runSmokeTurn(turnId: string): Promise<SmokeResult> {
   const transcript = typeof sttPayload.text === 'string' ? sttPayload.text : ''
   const chatResponse = await handleChatPost(
     createJsonRequest('http://localhost/api/chat', {
+      conversationId: `conversation-${turnId}`,
       turnId,
       text: transcript,
       personaId: 'Conversational',

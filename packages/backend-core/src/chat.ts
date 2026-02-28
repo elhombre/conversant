@@ -1,6 +1,7 @@
 import { type ChatRequestBody, PERSONA_IDS, type PersonaId } from '@conversant/api-contracts'
 
 import { createRequestSignal, getAbortKind } from './shared/abort'
+import { getConversationStore } from './shared/conversation-store'
 import { jsonError } from './shared/http'
 import { createOpenAIClient, getOpenAIProviderConfig } from './shared/openai-client'
 import {
@@ -36,7 +37,8 @@ function parseBody(rawBody: unknown): ChatRequestBody | null {
 
   const turnId = readNonEmptyString(body.turnId)
   const text = readNonEmptyString(body.text)
-  if (!turnId || !text) {
+  const conversationId = readNonEmptyString(body.conversationId)
+  if (!turnId || !text || !conversationId) {
     return null
   }
 
@@ -44,6 +46,7 @@ function parseBody(rawBody: unknown): ChatRequestBody | null {
   const personaId = personaRaw && isPersonaId(personaRaw) ? personaRaw : undefined
 
   return {
+    conversationId,
     turnId,
     text,
     personaId,
@@ -112,6 +115,8 @@ export async function handleChatPost(request: Request) {
   const chatModel = process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o-mini'
   const personaId: PersonaId = body.personaId ?? 'Conversational'
   const systemPrompt = PERSONA_SYSTEM_PROMPTS[personaId]
+  const conversationStore = getConversationStore()
+  const history = conversationStore.getHistory(body.conversationId)
 
   const client = createOpenAIClient(providerConfig)
   const startedAt = performance.now()
@@ -125,6 +130,7 @@ export async function handleChatPost(request: Request) {
             role: 'system',
             content: systemPrompt,
           },
+          ...history,
           {
             role: 'user',
             content: body.text,
@@ -139,9 +145,11 @@ export async function handleChatPost(request: Request) {
     if (!text) {
       return jsonError(500, body.turnId, 'InternalError', 'LLM returned empty response')
     }
+    conversationStore.appendTurn(body.conversationId, body.text, text)
 
     return Response.json(
       {
+        conversationId: body.conversationId,
         turnId: body.turnId,
         text,
         personaId,

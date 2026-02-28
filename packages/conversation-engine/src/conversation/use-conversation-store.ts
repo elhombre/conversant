@@ -7,6 +7,7 @@ import { useConversationState } from './use-conversation-state'
 export function useConversationStore() {
   const conversationState = useConversationState()
   const runtime = useConversationRuntime({
+    setConversationId: conversationState.setConversationId,
     setState: conversationState.setState,
     setCaptureStage: conversationState.setCaptureStage,
     setMicStatus: conversationState.setMicStatus,
@@ -24,6 +25,10 @@ export function useConversationStore() {
     setLlmLatencyMs: conversationState.setLlmLatencyMs,
     setTtsLatencyMs: conversationState.setTtsLatencyMs,
   })
+
+  useEffect(() => {
+    runtime.conversationIdRef.current = conversationState.conversationId
+  }, [conversationState.conversationId, runtime.conversationIdRef])
 
   useEffect(() => {
     runtime.isMutedRef.current = conversationState.isMuted

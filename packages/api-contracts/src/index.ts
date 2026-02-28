@@ -33,12 +33,14 @@ type ErrorEnvelope<Code extends string> = {
 }
 
 export type ChatRequestBody = {
+  conversationId: string
   turnId: string
   text: string
   personaId?: PersonaId
 }
 
 export type ChatSuccessPayload = {
+  conversationId: string
   turnId: string
   text: string
   personaId?: PersonaId
@@ -71,3 +73,12 @@ export type TtsRequestBody = {
 }
 
 export type TtsErrorPayload = ErrorEnvelope<TtsErrorCode>
+
+export type SessionResetRequestBody = {
+  conversationId: string
+}
+
+export type SessionResetSuccessPayload = {
+  conversationId: string
+  cleared: true
+}

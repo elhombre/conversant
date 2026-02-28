@@ -24,6 +24,7 @@ describe('handleChatPost', () => {
     vi.mocked(getOpenAIProviderConfig).mockReturnValue(null)
 
     const request = createJsonRequest('http://localhost/api/chat', {
+      conversationId: 'c-1',
       turnId: 't-1',
       text: 'hello',
     })
@@ -38,6 +39,7 @@ describe('handleChatPost', () => {
 
   it('returns bad request for invalid payload', async () => {
     const request = createJsonRequest('http://localhost/api/chat', {
+      conversationId: 'c-2',
       turnId: '',
       text: '',
     })
@@ -72,6 +74,7 @@ describe('handleChatPost', () => {
     vi.mocked(createOpenAIClient).mockReturnValue(mockClient as unknown as OpenAIClient)
 
     const request = createJsonRequest('http://localhost/api/chat', {
+      conversationId: 'c-3',
       turnId: 't-2',
       text: 'How are you?',
     })
@@ -80,6 +83,7 @@ describe('handleChatPost', () => {
     const payload = await readJson(response)
 
     expect(response.status).toBe(200)
+    expect(payload.conversationId).toBe('c-3')
     expect(payload.turnId).toBe('t-2')
     expect(payload.text).toBe('Hello from model')
     expect(payload.personaId).toBe('Conversational')
@@ -113,6 +117,7 @@ describe('handleChatPost', () => {
     const request = createJsonRequest(
       'http://localhost/api/chat',
       {
+        conversationId: 'c-4',
         turnId: 't-3',
         text: 'hello',
       },
@@ -145,6 +150,7 @@ describe('handleChatPost', () => {
     vi.mocked(createOpenAIClient).mockReturnValue(mockClient as unknown as OpenAIClient)
 
     const request = createJsonRequest('http://localhost/api/chat', {
+      conversationId: 'c-5',
       turnId: 't-4',
       text: 'hello',
     })
@@ -156,5 +162,75 @@ describe('handleChatPost', () => {
     expect(response.status).toBe(500)
     expect(error.code).toBe('ProviderUnavailable')
     expect(error.message).toBe('Cannot reach LLM provider. Check OPENAI_BASE_URL and model availability.')
+  })
+
+  it('uses conversation history for subsequent turns in the same conversation', async () => {
+    const chatCreateMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: 'First answer',
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: 'Second answer',
+            },
+          },
+        ],
+      })
+
+    const mockClient = {
+      chat: {
+        completions: {
+          create: chatCreateMock,
+        },
+      },
+    }
+
+    vi.mocked(createOpenAIClient).mockReturnValue(mockClient as unknown as OpenAIClient)
+
+    const first = await handleChatPost(
+      createJsonRequest('http://localhost/api/chat', {
+        conversationId: 'history-c-1',
+        turnId: 'h-1',
+        text: 'First question',
+      }),
+    )
+    expect(first.status).toBe(200)
+
+    const second = await handleChatPost(
+      createJsonRequest('http://localhost/api/chat', {
+        conversationId: 'history-c-1',
+        turnId: 'h-2',
+        text: 'Second question',
+      }),
+    )
+    expect(second.status).toBe(200)
+
+    const secondCallArgs = chatCreateMock.mock.calls[1]
+    expect(secondCallArgs).toBeDefined()
+
+    const secondRequestPayload = asRecord(secondCallArgs?.[0])
+    const messages = secondRequestPayload.messages as unknown[]
+    expect(Array.isArray(messages)).toBe(true)
+    expect(messages).toHaveLength(4)
+
+    const historyUser = asRecord(messages[1])
+    const historyAssistant = asRecord(messages[2])
+    const latestUser = asRecord(messages[3])
+
+    expect(historyUser.role).toBe('user')
+    expect(historyUser.content).toBe('First question')
+    expect(historyAssistant.role).toBe('assistant')
+    expect(historyAssistant.content).toBe('First answer')
+    expect(latestUser.role).toBe('user')
+    expect(latestUser.content).toBe('Second question')
   })
 })

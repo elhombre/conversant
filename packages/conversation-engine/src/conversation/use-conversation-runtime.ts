@@ -3,7 +3,7 @@ import { useCallback, useRef } from 'react'
 import { EnergyVad } from '../vad/energy-vad'
 import { VAD_PRESETS } from '../vad/presets'
 import type { VadPreset } from '../vad/types'
-import { pickRecorderMimeType } from './audio-io'
+import { createConversationId, pickRecorderMimeType } from './audio-io'
 import type {
   AudioCtxState,
   CaptureStage,
@@ -24,6 +24,7 @@ type CaptureCallbacks = {
 }
 
 type UseConversationRuntimeParams = {
+  setConversationId: Dispatch<SetStateAction<string>>
   setState: Dispatch<SetStateAction<ConversationState>>
   setCaptureStage: Dispatch<SetStateAction<CaptureStage>>
   setMicStatus: Dispatch<SetStateAction<MicStatus>>
@@ -43,6 +44,7 @@ type UseConversationRuntimeParams = {
 }
 
 export function useConversationRuntime({
+  setConversationId,
   setState,
   setCaptureStage,
   setMicStatus,
@@ -71,6 +73,7 @@ export function useConversationRuntime({
   const pendingUtteranceRef = useRef<PendingUtteranceMeta | null>(null)
   const utteranceTokenRef = useRef(0)
   const sessionTokenRef = useRef(0)
+  const conversationIdRef = useRef('')
   const micRequestInFlightRef = useRef(false)
   const isMutedRef = useRef(false)
   const micStatusRef = useRef<MicStatus>('idle')
@@ -357,6 +360,9 @@ export function useConversationRuntime({
     (initializeMicrophone: () => Promise<void>) => {
       sessionTokenRef.current += 1
       utteranceTokenRef.current += 1
+      const nextConversationId = createConversationId()
+      conversationIdRef.current = nextConversationId
+      setConversationId(nextConversationId)
 
       abortTurnRequests()
 
@@ -392,6 +398,7 @@ export function useConversationRuntime({
     [
       abortTurnRequests,
       releaseUtteranceUrl,
+      setConversationId,
       setCaptureStage,
       setInputLevel,
       setInterruptionCount,
@@ -466,6 +473,7 @@ export function useConversationRuntime({
     pendingUtteranceRef,
     utteranceTokenRef,
     sessionTokenRef,
+    conversationIdRef,
     micRequestInFlightRef,
     isMutedRef,
     micStatusRef,

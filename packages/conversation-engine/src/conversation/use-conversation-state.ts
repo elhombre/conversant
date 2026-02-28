@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { VadPreset } from '../vad/types'
+import { createConversationId } from './audio-io'
 import type {
   AudioCtxState,
   CaptureStage,
@@ -13,6 +14,7 @@ import type {
 } from './engine-types'
 
 export function useConversationState() {
+  const [conversationId, setConversationId] = useState(() => createConversationId())
   const [state, setState] = useState<ConversationState>('listening')
   const [captureStage, setCaptureStage] = useState<CaptureStage>('idle')
   const [micStatus, setMicStatus] = useState<MicStatus>('idle')
@@ -54,6 +56,8 @@ export function useConversationState() {
   }, [])
 
   return {
+    conversationId,
+    setConversationId,
     state,
     setState,
     captureStage,

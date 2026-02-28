@@ -26,6 +26,14 @@ export function createTurnId() {
   return `turn-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`
 }
 
+export function createConversationId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `conversation-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`
+}
+
 export function calculateDbFromTimeDomain(buffer: Uint8Array<ArrayBuffer>): number {
   let sumSquares = 0
   for (let i = 0; i < buffer.length; i += 1) {

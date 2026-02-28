@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { VAD_PRESETS } from '../vad/presets'
 import type { VadConfig } from '../vad/types'
+import { requestResetConversation } from './turn-api'
 import type { TurnRuntime } from './turn-runtime'
 import { useCaptureHandlers } from './use-capture-handlers'
 import { useConversationStore } from './use-conversation-store'
@@ -11,6 +12,7 @@ import { useTurnHandlers } from './use-turn-handlers'
 
 export function useConversationEngine() {
   const {
+    conversationId,
     state,
     setState,
     captureStage,
@@ -55,6 +57,7 @@ export function useConversationEngine() {
     pendingUtteranceRef,
     utteranceTokenRef,
     sessionTokenRef,
+    conversationIdRef,
     isMutedRef,
     micStatusRef,
     activePresetRef,
@@ -98,6 +101,7 @@ export function useConversationEngine() {
   const turnRuntime: TurnRuntime = useMemo(
     () => ({
       activeTurnIdRef,
+      conversationIdRef,
       activeVoiceRef,
       activePersonaRef,
       sessionTokenRef,
@@ -133,6 +137,7 @@ export function useConversationEngine() {
     }),
     [
       activeTurnIdRef,
+      conversationIdRef,
       activeVoiceRef,
       activePersonaRef,
       sessionTokenRef,
@@ -212,8 +217,10 @@ export function useConversationEngine() {
   )
 
   const resetSession = useCallback(() => {
+    const previousConversationId = conversationIdRef.current
     resetSessionWithInitializer(initializeMicrophone)
-  }, [initializeMicrophone, resetSessionWithInitializer])
+    void requestResetConversation(previousConversationId)
+  }, [conversationIdRef, initializeMicrophone, resetSessionWithInitializer])
 
   const toggleMute = useCallback(() => {
     toggleMuteWithInitializer(initializeMicrophone)
@@ -260,6 +267,7 @@ export function useConversationEngine() {
 
   return {
     state,
+    conversationId,
     captureStage,
     micStatus,
     audioContextState,

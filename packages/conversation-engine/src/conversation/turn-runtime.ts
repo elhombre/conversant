@@ -12,6 +12,7 @@ import type {
 
 export type TurnRuntime = {
   activeTurnIdRef: RefObject<string | null>
+  conversationIdRef: RefObject<string>
   activeVoiceRef: RefObject<VoiceId>
   activePersonaRef: RefObject<PersonaId>
   sessionTokenRef: RefObject<number>

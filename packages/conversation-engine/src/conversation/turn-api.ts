@@ -2,6 +2,7 @@ import type {
   ChatErrorPayload,
   ChatRequestBody,
   ChatSuccessPayload,
+  SessionResetRequestBody,
   SttErrorPayload,
   SttMeta,
   SttSuccessPayload,
@@ -54,17 +55,20 @@ async function parseJsonObject<TPayload>(response: Response): Promise<TPayload |
 }
 
 export async function requestChatTurn({
+  conversationId,
   turnId,
   transcript,
   personaId,
   signal,
 }: {
+  conversationId: string
   turnId: string
   transcript: string
   personaId: PersonaId
   signal: AbortSignal
 }): Promise<ApiSuccess<ChatSuccessPayload> | ApiFailure<ChatErrorPayload>> {
   const body: ChatRequestBody = {
+    conversationId,
     turnId,
     text: transcript,
     personaId,
@@ -206,5 +210,23 @@ export async function requestTtsTurn({
     elapsedMs,
     responseTurnId,
     latencyHeaderMs: Number.isFinite(latencyFromHeader) ? latencyFromHeader : null,
+  }
+}
+
+export async function requestResetConversation(conversationId: string): Promise<void> {
+  const body: SessionResetRequestBody = {
+    conversationId,
+  }
+
+  try {
+    await fetch('/api/session/reset', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    // no-op: local reset should not fail when server cleanup is unavailable
   }
 }
