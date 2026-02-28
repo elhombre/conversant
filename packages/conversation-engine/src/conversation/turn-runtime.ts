@@ -52,4 +52,5 @@ export type TurnRuntime = {
   clearActiveTurn: (turnId: string) => void
   abortTurnRequests: () => void
   startTurnSoftTimeout: (turnId: string, sessionToken: number) => void
+  onConversationExpired?: (conversationId: string) => void
 }

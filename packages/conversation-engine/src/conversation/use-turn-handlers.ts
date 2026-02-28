@@ -10,6 +10,7 @@ import {
   getChatErrorMessage,
   getSttErrorMessage,
   getTtsErrorMessage,
+  isConversationExpiredChat,
   isNoSpeechDetectedStt,
   STT_REQUEST_TIMEOUT_MS,
   TTS_REQUEST_TIMEOUT_MS,
@@ -133,7 +134,20 @@ export function useTurnHandlers(runtime: TurnRuntime) {
         }
 
         if (!result.ok) {
-          runtime.setLastError(getChatErrorMessage(result.status, result.errorPayload))
+          const message = getChatErrorMessage(result.status, result.errorPayload)
+          if (isConversationExpiredChat(result.status, result.errorPayload)) {
+            runtime.setLastNotice(message)
+            runtime.setLastError(null)
+            runtime.setLlmLatencyMs(result.elapsedMs)
+            runtime.setCaptureStage('idle')
+            runtime.setState('listening')
+            runtime.abortTurnRequests()
+            runtime.clearActiveTurn(turnId)
+            runtime.onConversationExpired?.(runtime.conversationIdRef.current)
+            return
+          }
+
+          runtime.setLastError(message)
           runtime.setLlmLatencyMs(result.elapsedMs)
           runtime.setCaptureStage('idle')
           runtime.setState(result.status >= 500 ? 'error' : 'listening')

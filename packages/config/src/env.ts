@@ -8,6 +8,8 @@ const DEFAULT_OPENAI_STT_MODEL = 'gpt-4o-mini-transcribe'
 const DEFAULT_OPENAI_STT_LANGUAGE_DETECT_MODEL = 'whisper-1'
 const DEFAULT_OPENAI_TTS_MODEL = 'tts-1'
 const DEFAULT_INVITE_BASE_URL = 'http://localhost:3000'
+const DEFAULT_ASSISTANT_MAX_OUTPUT_TOKENS = 220
+const MAX_ASSISTANT_OUTPUT_TOKENS = 4096
 
 function readNonEmptyString(env: EnvSource, key: string): string | null {
   const raw = env[key]
@@ -37,6 +39,20 @@ function readPositiveInteger(env: EnvSource, key: string, fallback: number): num
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return fallback
+  }
+
+  return parsed
+}
+
+function readOptionalPositiveInteger(env: EnvSource, key: string): number | null {
+  const raw = readNonEmptyString(env, key)
+  if (!raw) {
+    return null
+  }
+
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
   }
 
   return parsed
@@ -85,6 +101,12 @@ export type InviteSessionEnv = {
   sessionTtlHours: number
 }
 
+export type AssistantRuntimeEnv = {
+  conversationMaxDurationSec: number | null
+  assistantSystemPrompt: string | null
+  assistantMaxOutputTokens: number
+}
+
 export function readInviteSessionEnv(env?: EnvSource): InviteSessionEnv | null {
   const source = resolveEnv(env)
   const inviteAdminSecret = readNonEmptyString(source, 'INVITE_ADMIN_SECRET')
@@ -108,6 +130,21 @@ export function readInviteAdminSecret(env?: EnvSource): string | null {
 export function readInviteBaseUrl(env?: EnvSource): string {
   const source = resolveEnv(env)
   return readNonEmptyString(source, 'INVITE_BASE_URL') ?? DEFAULT_INVITE_BASE_URL
+}
+
+export function readAssistantRuntimeEnv(env?: EnvSource): AssistantRuntimeEnv {
+  const source = resolveEnv(env)
+  const assistantMaxOutputTokens = readPositiveInteger(
+    source,
+    'ASSISTANT_MAX_OUTPUT_TOKENS',
+    DEFAULT_ASSISTANT_MAX_OUTPUT_TOKENS,
+  )
+
+  return {
+    conversationMaxDurationSec: readOptionalPositiveInteger(source, 'CONVERSATION_MAX_DURATION_SEC'),
+    assistantSystemPrompt: readNonEmptyString(source, 'ASSISTANT_SYSTEM_PROMPT'),
+    assistantMaxOutputTokens: Math.min(assistantMaxOutputTokens, MAX_ASSISTANT_OUTPUT_TOKENS),
+  }
 }
 
 export function isProductionEnv(env?: EnvSource): boolean {

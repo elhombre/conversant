@@ -8,11 +8,21 @@ import {
   VAD_PRESET_ORDER,
   VOICE_ORDER,
 } from '@conversant/conversation-engine'
+import { useRouter } from 'next/navigation'
+import { useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export function HomeClient() {
+  const router = useRouter()
+  const handleConversationExpired = useCallback(
+    (conversationId: string) => {
+      router.replace(`/conversation-ended/${encodeURIComponent(conversationId)}`)
+    },
+    [router],
+  )
+
   const {
     state,
     captureStage,
@@ -49,7 +59,9 @@ export function HomeClient() {
     toggleMute,
     releaseUtteranceUrl,
     reconnectMicrophone,
-  } = useConversationEngine()
+  } = useConversationEngine({
+    onConversationExpired: handleConversationExpired,
+  })
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 p-4 md:p-8">

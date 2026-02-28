@@ -11,9 +11,11 @@ export type {
   ConversationMessageRecord,
   ConversationScopeRecord,
   ConversationStoreRecord,
+  ConversationTranscriptMessageRecord,
+  ConversationTranscriptRecord,
   ConversationTurnRecord,
 } from './conversation-store'
-export { createPrismaConversationStore } from './conversation-store'
+export { createPrismaConversationStore, getConversationTranscript } from './conversation-store'
 
 export type {
   AuthIdentity,

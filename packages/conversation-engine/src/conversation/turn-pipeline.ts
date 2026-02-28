@@ -78,6 +78,7 @@ export function getChatErrorMessage(status: number, payload: ChatErrorPayload | 
     BadRequest: 'Invalid chat payload.',
     Timeout: 'LLM request timed out. Please retry.',
     Cancelled: 'Chat request was cancelled.',
+    ConversationExpired: 'Conversation time is over. Redirecting to transcript.',
     ProviderUnavailable: 'LLM provider is unavailable right now.',
     InternalError: 'Unexpected LLM error occurred.',
   }
@@ -101,7 +102,20 @@ export function getChatErrorMessage(status: number, payload: ChatErrorPayload | 
     return 'Authentication required. Open a valid invite link.'
   }
 
+  if (status === 409) {
+    return defaultMessages.ConversationExpired
+  }
+
   return defaultMessages.InternalError
+}
+
+export function isConversationExpiredChat(status: number, payload: ChatErrorPayload | null): boolean {
+  const code = payload?.error?.code
+  if (code === 'ConversationExpired') {
+    return true
+  }
+
+  return status === 409
 }
 
 export function getTtsErrorMessage(status: number, payload: TtsErrorPayload | null) {

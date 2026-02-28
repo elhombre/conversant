@@ -1,4 +1,4 @@
-import { readOpenAIProviderEnv } from '@conversant/config'
+import { readAssistantRuntimeEnv, readOpenAIProviderEnv } from '@conversant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleChatPost } from '../src/chat'
@@ -18,6 +18,11 @@ vi.mock('@conversant/config', () => ({
     sttModel: 'gpt-4o-mini-transcribe',
     sttLanguageDetectModel: 'whisper-1',
     ttsModel: 'tts-1',
+  })),
+  readAssistantRuntimeEnv: vi.fn(() => ({
+    conversationMaxDurationSec: null,
+    assistantSystemPrompt: null,
+    assistantMaxOutputTokens: 220,
   })),
 }))
 
@@ -112,6 +117,11 @@ describe('smoke turn flow', () => {
     vi.mocked(readOpenAIProviderEnv).mockReturnValue({
       apiKey: 'test-key',
       baseURL: 'http://provider.local/v1',
+    })
+    vi.mocked(readAssistantRuntimeEnv).mockReturnValue({
+      conversationMaxDurationSec: null,
+      assistantSystemPrompt: null,
+      assistantMaxOutputTokens: 220,
     })
   })
 

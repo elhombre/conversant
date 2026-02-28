@@ -1,5 +1,5 @@
 import { type ChatHistoryMessage, type ChatRequestBody, PERSONA_IDS, type PersonaId } from '@conversant/api-contracts'
-import { readOpenAIModelEnv, readOpenAIProviderEnv } from '@conversant/config'
+import { readAssistantRuntimeEnv, readOpenAIModelEnv, readOpenAIProviderEnv } from '@conversant/config'
 
 import { createRequestSignal, getAbortKind } from './shared/abort'
 import { type ConversationScope, type ConversationStore, getConversationStore } from './shared/conversation-store'
@@ -15,7 +15,6 @@ import {
 import { asRecord, readNonEmptyString } from './shared/parsing'
 
 const CHAT_TIMEOUT_MS = 15_000
-const CHAT_MAX_TOKENS = 220
 const CHAT_MAX_HISTORY_MESSAGES = 24
 
 export type ChatHandlerOptions = {
@@ -30,6 +29,10 @@ const PERSONA_SYSTEM_PROMPTS: Record<PersonaId, string> = {
     'You are a conversational voice assistant. Be natural, warm, and practical. Keep responses brief and easy to say aloud.',
   Interviewer:
     'You are an interviewer-style assistant. Be structured, ask clarifying follow-up questions when useful, and keep responses focused.',
+}
+
+type CodedError = {
+  code?: unknown
 }
 
 function isPersonaId(value: string): value is PersonaId {
@@ -84,6 +87,22 @@ function parseBody(rawBody: unknown): ChatRequestBody | null {
     personaId,
     history,
   }
+}
+
+function isConversationExpiredError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  return (error as CodedError).code === 'ConversationExpired'
+}
+
+function composeSystemPrompt(personaPrompt: string, basePrompt: string | null): string {
+  if (!basePrompt) {
+    return personaPrompt
+  }
+
+  return `${basePrompt}\n\nPersona behavior:\n${personaPrompt}`
 }
 
 function mapProviderError(status: number | null, message: string) {
@@ -146,9 +165,10 @@ export async function handleChatPost(request: Request, options: ChatHandlerOptio
 
   const signal = createRequestSignal(request.signal, CHAT_TIMEOUT_MS)
   const modelConfig = readOpenAIModelEnv()
+  const assistantRuntime = readAssistantRuntimeEnv()
   const chatModel = modelConfig.chatModel
   const personaId: PersonaId = body.personaId ?? 'Conversational'
-  const systemPrompt = PERSONA_SYSTEM_PROMPTS[personaId]
+  const systemPrompt = composeSystemPrompt(PERSONA_SYSTEM_PROMPTS[personaId], assistantRuntime.assistantSystemPrompt)
   const conversationStore = options.conversationStore ?? getConversationStore()
   const scope: ConversationScope = {
     conversationId: body.conversationId,
@@ -157,7 +177,11 @@ export async function handleChatPost(request: Request, options: ChatHandlerOptio
   let serverHistory: ChatHistoryMessage[]
   try {
     serverHistory = await conversationStore.getHistory(scope)
-  } catch {
+  } catch (error) {
+    if (isConversationExpiredError(error)) {
+      return jsonError(409, body.turnId, 'ConversationExpired', 'Conversation time limit reached.')
+    }
+
     return jsonError(500, body.turnId, 'InternalError', 'Failed to load conversation history')
   }
   const history = (serverHistory.length > 0 ? serverHistory : (body.history ?? [])).slice(-CHAT_MAX_HISTORY_MESSAGES)
@@ -182,7 +206,7 @@ export async function handleChatPost(request: Request, options: ChatHandlerOptio
             content: body.text,
           },
         ],
-        max_completion_tokens: CHAT_MAX_TOKENS,
+        max_completion_tokens: assistantRuntime.assistantMaxOutputTokens,
       },
       { signal },
     )
@@ -217,7 +241,11 @@ export async function handleChatPost(request: Request, options: ChatHandlerOptio
       assistantModel: chatModel,
       assistantLatencyMs: llmLatencyMs,
     })
-  } catch {
+  } catch (error) {
+    if (isConversationExpiredError(error)) {
+      return jsonError(409, body.turnId, 'ConversationExpired', 'Conversation time limit reached.')
+    }
+
     return jsonError(500, body.turnId, 'InternalError', 'Failed to persist conversation state')
   }
 

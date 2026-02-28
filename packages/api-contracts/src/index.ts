@@ -10,7 +10,13 @@ export type SttLanguageCode = (typeof STT_LANGUAGE_CODES)[number]
 export const STT_LANGUAGE_MODES = ['off', 'strict'] as const
 export type SttLanguageMode = (typeof STT_LANGUAGE_MODES)[number]
 
-export type ChatErrorCode = 'BadRequest' | 'Timeout' | 'Cancelled' | 'ProviderUnavailable' | 'InternalError'
+export type ChatErrorCode =
+  | 'BadRequest'
+  | 'Timeout'
+  | 'Cancelled'
+  | 'ConversationExpired'
+  | 'ProviderUnavailable'
+  | 'InternalError'
 
 export type SttErrorCode =
   | 'BadAudioFormat'

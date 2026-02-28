@@ -1,4 +1,4 @@
-import { readOpenAIProviderEnv } from '@conversant/config'
+import { readAssistantRuntimeEnv, readOpenAIProviderEnv } from '@conversant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleChatPost } from '../src/chat'
@@ -17,6 +17,11 @@ vi.mock('@conversant/config', () => ({
     sttLanguageDetectModel: 'whisper-1',
     ttsModel: 'tts-1',
   })),
+  readAssistantRuntimeEnv: vi.fn(() => ({
+    conversationMaxDurationSec: null,
+    assistantSystemPrompt: null,
+    assistantMaxOutputTokens: 220,
+  })),
 }))
 
 type OpenAIClient = ReturnType<typeof createOpenAIClient>
@@ -27,6 +32,11 @@ describe('handleChatPost', () => {
     vi.mocked(readOpenAIProviderEnv).mockReturnValue({
       apiKey: 'test-key',
       baseURL: 'http://provider.local/v1',
+    })
+    vi.mocked(readAssistantRuntimeEnv).mockReturnValue({
+      conversationMaxDurationSec: null,
+      assistantSystemPrompt: null,
+      assistantMaxOutputTokens: 220,
     })
   })
 
@@ -104,6 +114,58 @@ describe('handleChatPost', () => {
 
     const requestPayload = asRecord(callArgs?.[0])
     expect(requestPayload.model).toBe('gpt-4o-mini')
+  })
+
+  it('applies assistant runtime prompt and max token guardrail from env config', async () => {
+    vi.mocked(readAssistantRuntimeEnv).mockReturnValue({
+      conversationMaxDurationSec: null,
+      assistantSystemPrompt: 'Always answer in short bullet points.',
+      assistantMaxOutputTokens: 77,
+    })
+
+    const chatCreateMock = vi.fn(async () => ({
+      choices: [
+        {
+          message: {
+            content: 'Structured answer',
+          },
+        },
+      ],
+    }))
+
+    const mockClient = {
+      chat: {
+        completions: {
+          create: chatCreateMock,
+        },
+      },
+    }
+
+    vi.mocked(createOpenAIClient).mockReturnValue(mockClient as unknown as OpenAIClient)
+
+    const response = await handleChatPost(
+      createJsonRequest('http://localhost/api/chat', {
+        conversationId: 'c-guardrail-1',
+        turnId: 't-guardrail-1',
+        text: 'hello',
+        personaId: 'Concise',
+      }),
+    )
+
+    expect(response.status).toBe(200)
+
+    const callArgs = chatCreateMock.mock.calls[0]
+    expect(callArgs).toBeDefined()
+
+    const requestPayload = asRecord(callArgs?.[0])
+    expect(requestPayload.max_completion_tokens).toBe(77)
+
+    const messages = requestPayload.messages as unknown[]
+    expect(Array.isArray(messages)).toBe(true)
+    const systemMessage = asRecord(messages[0])
+    expect(systemMessage.role).toBe('system')
+    expect(String(systemMessage.content)).toContain('Always answer in short bullet points.')
+    expect(String(systemMessage.content)).toContain('You are a concise voice assistant.')
   })
 
   it('returns cancelled when request signal is aborted', async () => {
@@ -302,5 +364,30 @@ describe('handleChatPost', () => {
     expect(historyAssistant.content).toBe('I remember this fact')
     expect(latestUser.role).toBe('user')
     expect(latestUser.content).toBe('What did I ask before?')
+  })
+
+  it('returns conversation expired when store rejects expired conversation', async () => {
+    const request = createJsonRequest('http://localhost/api/chat', {
+      conversationId: 'expired-c-1',
+      turnId: 'expired-turn-1',
+      text: 'hello',
+    })
+
+    const response = await handleChatPost(request, {
+      conversationStore: {
+        async getHistory() {
+          const error = new Error('Conversation time limit reached.') as Error & { code?: string }
+          error.code = 'ConversationExpired'
+          throw error
+        },
+        async appendTurn() {},
+        async clearConversation() {},
+      },
+    })
+
+    const payload = await readJson(response)
+    const error = readError(payload)
+    expect(response.status).toBe(409)
+    expect(error.code).toBe('ConversationExpired')
   })
 })

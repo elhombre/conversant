@@ -10,7 +10,11 @@ import { useConversationStore } from './use-conversation-store'
 import { useConversationVariants } from './use-conversation-variants'
 import { useTurnHandlers } from './use-turn-handlers'
 
-export function useConversationEngine() {
+export type UseConversationEngineOptions = {
+  onConversationExpired?: (conversationId: string) => void
+}
+
+export function useConversationEngine(options: UseConversationEngineOptions = {}) {
   const {
     conversationId,
     state,
@@ -139,6 +143,7 @@ export function useConversationEngine() {
       clearActiveTurn,
       abortTurnRequests,
       startTurnSoftTimeout,
+      onConversationExpired: options.onConversationExpired,
     }),
     [
       activeTurnIdRef,
@@ -177,6 +182,7 @@ export function useConversationEngine() {
       clearActiveTurn,
       abortTurnRequests,
       startTurnSoftTimeout,
+      options.onConversationExpired,
     ],
   )
 
