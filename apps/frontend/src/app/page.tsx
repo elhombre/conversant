@@ -13,6 +13,8 @@ type ConversationState = 'listening' | 'user_speaking' | 'processing' | 'assista
 type MicStatus = 'idle' | 'requesting' | 'ready' | 'denied' | 'error'
 type CaptureStage = 'idle' | 'speaking' | 'finalizing'
 type AudioCtxState = AudioContextState | 'uninitialized'
+type PersonaId = 'Concise' | 'Conversational' | 'Interviewer'
+type VoiceId = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'
 
 type SttErrorCode =
   | 'BadAudioFormat'
@@ -30,6 +32,33 @@ type SttSuccessPayload = {
 }
 
 type SttErrorPayload = {
+  turnId?: string | null
+  error?: {
+    code?: string
+    message?: string
+  }
+}
+
+type ChatErrorCode = 'BadRequest' | 'Timeout' | 'Cancelled' | 'ProviderUnavailable' | 'InternalError'
+
+type ChatSuccessPayload = {
+  turnId: string
+  text: string
+  personaId?: PersonaId
+  latencyMs?: number
+}
+
+type ChatErrorPayload = {
+  turnId?: string | null
+  error?: {
+    code?: string
+    message?: string
+  }
+}
+
+type TtsErrorCode = 'BadRequest' | 'Timeout' | 'Cancelled' | 'ProviderUnavailable' | 'InternalError'
+
+type TtsErrorPayload = {
   turnId?: string | null
   error?: {
     code?: string
@@ -58,7 +87,14 @@ type PendingUtteranceMeta = {
   durationMs: number
   reason: VadEndReason
   accepted: boolean
+  confirmed: boolean
+  silentDiscard: boolean
 }
+
+const PERSONA_ORDER: PersonaId[] = ['Concise', 'Conversational', 'Interviewer']
+const VOICE_ORDER: VoiceId[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+const PRE_TRIGGER_DB_MARGIN = 10
+const MAX_TENTATIVE_CAPTURE_MS = 1_200
 
 function pickRecorderMimeType() {
   if (typeof MediaRecorder === 'undefined') return null
@@ -81,13 +117,13 @@ function createTurnId() {
   return `turn-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`
 }
 
-function getErrorMessage(status: number, payload: SttErrorPayload | null) {
+function getSttErrorMessage(status: number, payload: SttErrorPayload | null) {
   const defaultMessages: Record<SttErrorCode, string> = {
     BadAudioFormat: 'Invalid audio format or payload.',
     PayloadTooLarge: 'Audio payload is too large.',
     NoSpeechDetected: 'No speech detected. Try speaking a bit longer.',
     Timeout: 'STT request timed out. Please retry.',
-    Cancelled: 'Request was cancelled.',
+    Cancelled: 'STT request was cancelled.',
     ProviderUnavailable: 'STT provider is unavailable right now.',
     InternalError: 'Unexpected STT error occurred.',
   }
@@ -114,20 +150,79 @@ function getErrorMessage(status: number, payload: SttErrorPayload | null) {
   return defaultMessages.InternalError
 }
 
+function getChatErrorMessage(status: number, payload: ChatErrorPayload | null) {
+  const defaultMessages: Record<ChatErrorCode, string> = {
+    BadRequest: 'Invalid chat payload.',
+    Timeout: 'LLM request timed out. Please retry.',
+    Cancelled: 'Chat request was cancelled.',
+    ProviderUnavailable: 'LLM provider is unavailable right now.',
+    InternalError: 'Unexpected LLM error occurred.',
+  }
+
+  const code = payload?.error?.code
+  const message = payload?.error?.message
+
+  if (typeof message === 'string' && message.length > 0) {
+    return message
+  }
+
+  if (typeof code === 'string' && code in defaultMessages) {
+    return defaultMessages[code as ChatErrorCode]
+  }
+
+  if (status >= 500) {
+    return defaultMessages.ProviderUnavailable
+  }
+
+  return defaultMessages.InternalError
+}
+
+function getTtsErrorMessage(status: number, payload: TtsErrorPayload | null) {
+  const defaultMessages: Record<TtsErrorCode, string> = {
+    BadRequest: 'Invalid TTS payload.',
+    Timeout: 'TTS request timed out. Please retry.',
+    Cancelled: 'TTS request was cancelled.',
+    ProviderUnavailable: 'TTS provider is unavailable right now.',
+    InternalError: 'Unexpected TTS error occurred.',
+  }
+
+  const code = payload?.error?.code
+  const message = payload?.error?.message
+
+  if (typeof message === 'string' && message.length > 0) {
+    return message
+  }
+
+  if (typeof code === 'string' && code in defaultMessages) {
+    return defaultMessages[code as TtsErrorCode]
+  }
+
+  if (status >= 500) {
+    return defaultMessages.ProviderUnavailable
+  }
+
+  return defaultMessages.InternalError
+}
+
 export default function Home() {
   const [state, setState] = useState<ConversationState>('listening')
   const [captureStage, setCaptureStage] = useState<CaptureStage>('idle')
   const [micStatus, setMicStatus] = useState<MicStatus>('idle')
+  const [audioContextState, setAudioContextState] = useState<AudioCtxState>('uninitialized')
   const [inputLevel, setInputLevel] = useState(0)
   const [isMuted, setIsMuted] = useState(false)
   const [interruptionCount, setInterruptionCount] = useState(0)
   const [lastError, setLastError] = useState<string | null>(null)
   const [activePreset, setActivePreset] = useState<VadPreset>('Normal')
+  const [activePersona, setActivePersona] = useState<PersonaId>('Conversational')
+  const [activeVoice, setActiveVoice] = useState<VoiceId>('alloy')
   const [lastUtterance, setLastUtterance] = useState<LastUtterance | null>(null)
   const [lastTranscript, setLastTranscript] = useState('')
+  const [lastAssistantText, setLastAssistantText] = useState('')
   const [lastTurnId, setLastTurnId] = useState('')
   const [sttLatencyMs, setSttLatencyMs] = useState<number | null>(null)
-  const [audioContextState, setAudioContextState] = useState<AudioCtxState>('uninitialized')
+  const [llmLatencyMs, setLlmLatencyMs] = useState<number | null>(null)
+  const [ttsLatencyMs, setTtsLatencyMs] = useState<number | null>(null)
 
   const streamRef = useRef<MediaStream | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
@@ -144,7 +239,14 @@ export default function Home() {
   const isMutedRef = useRef(false)
   const micStatusRef = useRef<MicStatus>('idle')
   const activePresetRef = useRef<VadPreset>('Normal')
+  const activePersonaRef = useRef<PersonaId>('Conversational')
+  const activeVoiceRef = useRef<VoiceId>('alloy')
   const sttAbortControllerRef = useRef<AbortController | null>(null)
+  const chatAbortControllerRef = useRef<AbortController | null>(null)
+  const ttsAbortControllerRef = useRef<AbortController | null>(null)
+  const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null)
+  const playbackAudioUrlRef = useRef<string | null>(null)
   const activeTurnIdRef = useRef<string | null>(null)
   const vadRef = useRef(new EnergyVad(VAD_PRESETS.Normal))
 
@@ -152,6 +254,16 @@ export default function Home() {
     setActivePreset(preset)
     activePresetRef.current = preset
     vadRef.current.setConfig(VAD_PRESETS[preset])
+  }, [])
+
+  const setPersona = useCallback((personaId: PersonaId) => {
+    setActivePersona(personaId)
+    activePersonaRef.current = personaId
+  }, [])
+
+  const setVoice = useCallback((voice: VoiceId) => {
+    setActiveVoice(voice)
+    activeVoiceRef.current = voice
   }, [])
 
   useEffect(() => {
@@ -162,14 +274,63 @@ export default function Home() {
     micStatusRef.current = micStatus
   }, [micStatus])
 
-  const abortStt = useCallback(() => {
-    const controller = sttAbortControllerRef.current
-    if (controller) {
-      controller.abort()
+  const clearActiveTurn = useCallback((turnId: string) => {
+    if (activeTurnIdRef.current === turnId) {
+      activeTurnIdRef.current = null
+    }
+  }, [])
+
+  const stopPlayback = useCallback(() => {
+    const source = playbackSourceRef.current
+    if (source) {
+      source.onended = null
+      try {
+        source.stop()
+      } catch {
+        // no-op: source may already be stopped
+      }
+      source.disconnect()
+      playbackSourceRef.current = null
+    }
+
+    const audio = playbackAudioRef.current
+    if (audio) {
+      audio.onended = null
+      audio.onerror = null
+      audio.pause()
+      audio.currentTime = 0
+      playbackAudioRef.current = null
+    }
+
+    const audioUrl = playbackAudioUrlRef.current
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl)
+      playbackAudioUrlRef.current = null
+    }
+  }, [])
+
+  const abortTurnRequests = useCallback(() => {
+    const sttController = sttAbortControllerRef.current
+    if (sttController) {
+      sttController.abort()
       sttAbortControllerRef.current = null
     }
+
+    const chatController = chatAbortControllerRef.current
+    if (chatController) {
+      chatController.abort()
+      chatAbortControllerRef.current = null
+    }
+
+    const ttsController = ttsAbortControllerRef.current
+    if (ttsController) {
+      ttsController.abort()
+      ttsAbortControllerRef.current = null
+    }
+
+    stopPlayback()
     activeTurnIdRef.current = null
-  }, [])
+  }, [stopPlayback])
 
   const releaseUtteranceUrl = useCallback(() => {
     setLastUtterance(previous => {
@@ -216,9 +377,10 @@ export default function Home() {
       contextRef.current = null
     }
     setAudioContextState('uninitialized')
+    stopPlayback()
 
     vadRef.current.reset()
-  }, [stopMeterLoop])
+  }, [stopMeterLoop, stopPlayback])
 
   const resumeAudioContext = useCallback(async () => {
     const context = contextRef.current
@@ -237,12 +399,307 @@ export default function Home() {
     }
   }, [])
 
+  const runTtsForTurn = useCallback(
+    async (turnId: string, text: string, sessionToken: number) => {
+      const controller = new AbortController()
+      ttsAbortControllerRef.current = controller
+
+      const timeoutId = window.setTimeout(() => {
+        controller.abort('timeout')
+      }, 15_000)
+
+      try {
+        const startedAt = performance.now()
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            turnId,
+            text,
+            voice: activeVoiceRef.current,
+          }),
+          signal: controller.signal,
+        })
+
+        const elapsedMs = Math.round(performance.now() - startedAt)
+        const stale = sessionTokenRef.current !== sessionToken || activeTurnIdRef.current !== turnId
+        if (stale) {
+          return
+        }
+
+        if (!response.ok) {
+          const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
+          const payload: unknown = isJson ? await response.json() : null
+          const errorPayload = payload && typeof payload === 'object' ? (payload as TtsErrorPayload) : null
+          setLastError(getTtsErrorMessage(response.status, errorPayload))
+          setTtsLatencyMs(elapsedMs)
+          setCaptureStage('idle')
+
+          if (response.status >= 500) {
+            setState('error')
+          } else {
+            setState('listening')
+          }
+
+          clearActiveTurn(turnId)
+          return
+        }
+
+        const responseTurnId = response.headers.get('x-turn-id')
+        if (responseTurnId !== turnId) {
+          setLastError('TTS response turn mismatch.')
+          setCaptureStage('idle')
+          setState('error')
+          clearActiveTurn(turnId)
+          return
+        }
+
+        const blob = await response.blob()
+        if (blob.size === 0) {
+          setLastError('TTS response is empty.')
+          setCaptureStage('idle')
+          setState('error')
+          clearActiveTurn(turnId)
+          return
+        }
+
+        const latencyHeader = response.headers.get('x-tts-latency-ms')
+        const latencyFromHeader =
+          typeof latencyHeader === 'string' && latencyHeader.length > 0 ? Number.parseInt(latencyHeader, 10) : NaN
+        setTtsLatencyMs(Number.isFinite(latencyFromHeader) ? latencyFromHeader : elapsedMs)
+
+        stopPlayback()
+
+        const currentContext = contextRef.current
+        if (currentContext) {
+          if (currentContext.state === 'suspended') {
+            await currentContext.resume()
+            setAudioContextState(currentContext.state)
+          }
+
+          if (currentContext.state === 'running') {
+            try {
+              const rawBuffer = await blob.arrayBuffer()
+              const decodedBuffer = await currentContext.decodeAudioData(rawBuffer.slice(0))
+
+              const staleAfterDecode = sessionTokenRef.current !== sessionToken || activeTurnIdRef.current !== turnId
+              if (staleAfterDecode) {
+                return
+              }
+
+              const source = currentContext.createBufferSource()
+              source.buffer = decodedBuffer
+              source.connect(currentContext.destination)
+              playbackSourceRef.current = source
+
+              const finalizePlayback = (nextState: ConversationState, message: string | null) => {
+                if (playbackSourceRef.current === source) {
+                  playbackSourceRef.current = null
+                }
+
+                const stillSameTurn = sessionTokenRef.current === sessionToken && activeTurnIdRef.current === turnId
+                if (!stillSameTurn) {
+                  return
+                }
+
+                setCaptureStage('idle')
+                setLastError(message)
+                setState(nextState)
+                clearActiveTurn(turnId)
+              }
+
+              source.onended = () => {
+                finalizePlayback('listening', null)
+              }
+
+              setState('assistant_speaking')
+              setCaptureStage('idle')
+              source.start(0)
+              return
+            } catch {
+              // Fallback below to HTMLAudioElement playback if WebAudio decode fails.
+            }
+          }
+        }
+
+        const audioUrl = URL.createObjectURL(blob)
+        const audio = new Audio(audioUrl)
+        audio.preload = 'auto'
+
+        playbackAudioRef.current = audio
+        playbackAudioUrlRef.current = audioUrl
+
+        const finalizePlayback = (nextState: ConversationState, message: string | null) => {
+          if (playbackAudioRef.current === audio) {
+            playbackAudioRef.current = null
+          }
+
+          if (playbackAudioUrlRef.current === audioUrl) {
+            URL.revokeObjectURL(audioUrl)
+            playbackAudioUrlRef.current = null
+          }
+
+          const stillSameTurn = sessionTokenRef.current === sessionToken && activeTurnIdRef.current === turnId
+          if (!stillSameTurn) {
+            return
+          }
+
+          setCaptureStage('idle')
+          setLastError(message)
+          setState(nextState)
+          clearActiveTurn(turnId)
+        }
+
+        audio.onended = () => {
+          finalizePlayback('listening', null)
+        }
+
+        audio.onerror = () => {
+          finalizePlayback('error', 'Playback failed. Check browser audio output settings.')
+        }
+
+        setState('assistant_speaking')
+        setCaptureStage('idle')
+
+        try {
+          await audio.play()
+        } catch {
+          finalizePlayback(
+            'listening',
+            'Playback was blocked by browser autoplay policy. Interact with the page and retry.',
+          )
+        }
+      } catch {
+        const stale = sessionTokenRef.current !== sessionToken || activeTurnIdRef.current !== turnId
+        if (stale) {
+          return
+        }
+
+        if (controller.signal.aborted) {
+          setCaptureStage('idle')
+          if (!isMutedRef.current) {
+            setState('listening')
+          }
+          clearActiveTurn(turnId)
+          return
+        }
+
+        setLastError('Network error during TTS request.')
+        setCaptureStage('idle')
+        setState('error')
+        clearActiveTurn(turnId)
+      } finally {
+        window.clearTimeout(timeoutId)
+        if (ttsAbortControllerRef.current === controller) {
+          ttsAbortControllerRef.current = null
+        }
+      }
+    },
+    [clearActiveTurn, stopPlayback],
+  )
+
+  const runChatForTurn = useCallback(
+    async (turnId: string, transcript: string, sessionToken: number) => {
+      const controller = new AbortController()
+      chatAbortControllerRef.current = controller
+
+      const timeoutId = window.setTimeout(() => {
+        controller.abort('timeout')
+      }, 15_000)
+
+      try {
+        const startedAt = performance.now()
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            turnId,
+            text: transcript,
+            personaId: activePersonaRef.current,
+          }),
+          signal: controller.signal,
+        })
+
+        const elapsedMs = Math.round(performance.now() - startedAt)
+        const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
+        const payload: unknown = isJson ? await response.json() : null
+
+        const stale = sessionTokenRef.current !== sessionToken || activeTurnIdRef.current !== turnId
+        if (stale) {
+          return
+        }
+
+        if (!response.ok) {
+          const errorPayload = payload && typeof payload === 'object' ? (payload as ChatErrorPayload) : null
+          setLastError(getChatErrorMessage(response.status, errorPayload))
+          setLlmLatencyMs(elapsedMs)
+          setCaptureStage('idle')
+
+          if (response.status >= 500) {
+            setState('error')
+          } else {
+            setState('listening')
+          }
+
+          clearActiveTurn(turnId)
+          return
+        }
+
+        const successPayload = payload && typeof payload === 'object' ? (payload as ChatSuccessPayload) : null
+        if (!successPayload || typeof successPayload.text !== 'string' || successPayload.text.length === 0) {
+          setLastError('LLM response is invalid.')
+          setCaptureStage('idle')
+          setState('error')
+          clearActiveTurn(turnId)
+          return
+        }
+
+        setLastAssistantText(successPayload.text)
+        setLastError(null)
+        setLlmLatencyMs(typeof successPayload.latencyMs === 'number' ? successPayload.latencyMs : elapsedMs)
+        setState('processing')
+        setCaptureStage('finalizing')
+
+        await runTtsForTurn(turnId, successPayload.text, sessionToken)
+      } catch {
+        const stale = sessionTokenRef.current !== sessionToken || activeTurnIdRef.current !== turnId
+        if (stale) {
+          return
+        }
+
+        if (controller.signal.aborted) {
+          setCaptureStage('idle')
+          if (!isMutedRef.current) {
+            setState('listening')
+          }
+          clearActiveTurn(turnId)
+          return
+        }
+
+        setLastError('Network error during chat request.')
+        setCaptureStage('idle')
+        setState('error')
+        clearActiveTurn(turnId)
+      } finally {
+        window.clearTimeout(timeoutId)
+        if (chatAbortControllerRef.current === controller) {
+          chatAbortControllerRef.current = null
+        }
+      }
+    },
+    [clearActiveTurn, runTtsForTurn],
+  )
+
   const runSttForUtterance = useCallback(
     async (pending: PendingUtteranceMeta, blob: Blob) => {
       const turnId = pending.turnId
       const sessionToken = pending.sessionToken
 
-      abortStt()
+      abortTurnRequests()
 
       const controller = new AbortController()
       sttAbortControllerRef.current = controller
@@ -253,6 +710,9 @@ export default function Home() {
       }, 12_000)
 
       setLastTurnId(turnId)
+      setSttLatencyMs(null)
+      setLlmLatencyMs(null)
+      setTtsLatencyMs(null)
       setState('processing')
       setCaptureStage('finalizing')
 
@@ -290,8 +750,9 @@ export default function Home() {
 
         if (!response.ok) {
           const errorPayload = payload && typeof payload === 'object' ? (payload as SttErrorPayload) : null
-          setLastError(getErrorMessage(response.status, errorPayload))
+          setLastError(getSttErrorMessage(response.status, errorPayload))
           setSttLatencyMs(elapsedMs)
+          setCaptureStage('idle')
 
           if (response.status >= 500) {
             setState('error')
@@ -299,7 +760,7 @@ export default function Home() {
             setState('listening')
           }
 
-          setCaptureStage('idle')
+          clearActiveTurn(turnId)
           return
         }
 
@@ -308,14 +769,15 @@ export default function Home() {
           setLastError('STT response is invalid.')
           setState('error')
           setCaptureStage('idle')
+          clearActiveTurn(turnId)
           return
         }
 
         setLastTranscript(successPayload.text)
         setLastError(null)
         setSttLatencyMs(typeof successPayload.latencyMs === 'number' ? successPayload.latencyMs : elapsedMs)
-        setState('listening')
-        setCaptureStage('idle')
+
+        await runChatForTurn(turnId, successPayload.text, sessionToken)
       } catch {
         const stale = sessionTokenRef.current !== sessionToken || activeTurnIdRef.current !== turnId
         if (stale) {
@@ -327,25 +789,23 @@ export default function Home() {
           if (!isMutedRef.current) {
             setState('listening')
           }
+          clearActiveTurn(turnId)
           return
         }
 
         setLastError('Network error during STT request.')
         setState('error')
         setCaptureStage('idle')
+        clearActiveTurn(turnId)
       } finally {
         window.clearTimeout(timeoutId)
 
         if (sttAbortControllerRef.current === controller) {
           sttAbortControllerRef.current = null
         }
-
-        if (activeTurnIdRef.current === turnId) {
-          activeTurnIdRef.current = null
-        }
       }
     },
-    [abortStt],
+    [abortTurnRequests, clearActiveTurn, runChatForTurn],
   )
 
   const handleRecorderStop = useCallback(() => {
@@ -367,6 +827,12 @@ export default function Home() {
 
     const parts = recorderChunksRef.current
     recorderChunksRef.current = []
+
+    if (pending.silentDiscard || !pending.confirmed) {
+      setCaptureStage('idle')
+      setState('listening')
+      return
+    }
 
     if (!pending.accepted) {
       setCaptureStage('idle')
@@ -406,7 +872,7 @@ export default function Home() {
     void runSttForUtterance(pending, blob)
   }, [runSttForUtterance])
 
-  const beginSpeechCapture = useCallback((atMs: number) => {
+  const startSpeechCapture = useCallback((atMs: number, confirmed: boolean) => {
     if (isMutedRef.current) return
 
     const recorder = mediaRecorderRef.current
@@ -424,19 +890,74 @@ export default function Home() {
       durationMs: 0,
       reason: 'silence',
       accepted: false,
+      confirmed,
+      silentDiscard: false,
     }
 
     try {
-      setLastError(null)
-      setCaptureStage('speaking')
-      setState('user_speaking')
+      if (confirmed) {
+        setLastError(null)
+        setCaptureStage('speaking')
+        setState('user_speaking')
+      }
       recorder.start(200)
     } catch {
       pendingUtteranceRef.current = null
       recorderChunksRef.current = []
-      setCaptureStage('idle')
-      setState('listening')
-      setLastError('Could not start audio capture. Try reconnecting the microphone.')
+      if (confirmed) {
+        setCaptureStage('idle')
+        setState('listening')
+        setLastError('Could not start audio capture. Try reconnecting the microphone.')
+      }
+    }
+  }, [])
+
+  const confirmSpeechCapture = useCallback(
+    (atMs: number) => {
+      const pending = pendingUtteranceRef.current
+      if (pending && !pending.confirmed) {
+        pendingUtteranceRef.current = {
+          ...pending,
+          confirmed: true,
+          startMs: Math.min(pending.startMs, atMs),
+        }
+        setLastError(null)
+        setCaptureStage('speaking')
+        setState('user_speaking')
+        return
+      }
+
+      if (!pending) {
+        startSpeechCapture(atMs, true)
+      }
+    },
+    [startSpeechCapture],
+  )
+
+  const cancelTentativeCapture = useCallback((atMs: number) => {
+    const recorder = mediaRecorderRef.current
+    const pending = pendingUtteranceRef.current
+
+    if (!pending || pending.confirmed || pending.silentDiscard) {
+      return
+    }
+
+    pendingUtteranceRef.current = {
+      ...pending,
+      endMs: atMs,
+      durationMs: Math.max(0, atMs - pending.startMs),
+      reason: 'silence',
+      accepted: false,
+      silentDiscard: true,
+    }
+
+    if (recorder?.state === 'recording') {
+      try {
+        recorder.stop()
+      } catch {
+        pendingUtteranceRef.current = null
+        recorderChunksRef.current = []
+      }
     }
   }, [])
 
@@ -453,6 +974,7 @@ export default function Home() {
         durationMs,
         reason,
         accepted,
+        silentDiscard: false,
       }
 
       setCaptureStage('finalizing')
@@ -490,17 +1012,30 @@ export default function Home() {
         return
       }
 
+      const pending = pendingUtteranceRef.current
+      const thresholdDb = VAD_PRESETS[activePresetRef.current].thresholdDb
+      const preTriggerDb = thresholdDb - PRE_TRIGGER_DB_MARGIN
+
+      if (!pending && db >= preTriggerDb) {
+        startSpeechCapture(nowMs, false)
+      } else if (pending && !pending.confirmed && !vadRef.current.isSpeaking()) {
+        const exceededTentativeWindow = nowMs - pending.startMs > MAX_TENTATIVE_CAPTURE_MS
+        if (db < preTriggerDb || exceededTentativeWindow) {
+          cancelTentativeCapture(nowMs)
+        }
+      }
+
       const event = vadRef.current.process(db, nowMs)
       if (!event) return
 
       if (event.type === 'speech_start') {
-        beginSpeechCapture(event.atMs)
+        confirmSpeechCapture(event.atMs)
         return
       }
 
       endSpeechCapture(event.atMs, event.durationMs, event.reason, event.accepted)
     },
-    [beginSpeechCapture, endSpeechCapture],
+    [cancelTentativeCapture, confirmSpeechCapture, endSpeechCapture, startSpeechCapture],
   )
 
   const startMeterLoop = useCallback(() => {
@@ -549,7 +1084,8 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
-          noiseSuppression: true,
+          noiseSuppression: false,
+          autoGainControl: false,
         },
       })
 
@@ -581,6 +1117,7 @@ export default function Home() {
       audioContext.onstatechange = () => {
         setAudioContextState(audioContext.state)
       }
+
       if (audioContext.state === 'suspended') {
         await audioContext.resume()
         setAudioContextState(audioContext.state)
@@ -624,7 +1161,7 @@ export default function Home() {
     sessionTokenRef.current += 1
     utteranceTokenRef.current += 1
 
-    abortStt()
+    abortTurnRequests()
 
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop()
@@ -640,8 +1177,11 @@ export default function Home() {
     setCaptureStage('idle')
     setLastError(null)
     setLastTranscript('')
+    setLastAssistantText('')
     setLastTurnId('')
     setSttLatencyMs(null)
+    setLlmLatencyMs(null)
+    setTtsLatencyMs(null)
     releaseUtteranceUrl()
 
     if (micStatusRef.current === 'ready') {
@@ -650,13 +1190,13 @@ export default function Home() {
     }
 
     void initializeMicrophone()
-  }, [abortStt, initializeMicrophone, releaseUtteranceUrl])
+  }, [abortTurnRequests, initializeMicrophone, releaseUtteranceUrl])
 
   const toggleMute = useCallback(() => {
     sessionTokenRef.current += 1
     utteranceTokenRef.current += 1
 
-    abortStt()
+    abortTurnRequests()
 
     setIsMuted(previous => {
       const nextMuted = !previous
@@ -685,7 +1225,7 @@ export default function Home() {
 
       return nextMuted
     })
-  }, [abortStt, initializeMicrophone, state])
+  }, [abortTurnRequests, initializeMicrophone, state])
 
   useEffect(() => {
     void initializeMicrophone()
@@ -693,11 +1233,11 @@ export default function Home() {
     return () => {
       sessionTokenRef.current += 1
       utteranceTokenRef.current += 1
-      abortStt()
+      abortTurnRequests()
       cleanupAudio()
       releaseUtteranceUrl()
     }
-  }, [abortStt, cleanupAudio, initializeMicrophone, releaseUtteranceUrl])
+  }, [abortTurnRequests, cleanupAudio, initializeMicrophone, releaseUtteranceUrl])
 
   useEffect(() => {
     const onUserInteract = () => {
@@ -740,8 +1280,8 @@ export default function Home() {
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 p-4 md:p-8">
       <Card>
         <CardHeader>
-          <CardTitle>Conversant - Stage 2 STT</CardTitle>
-          <CardDescription>Energy-based VAD, utterance capture, and STT transcription.</CardDescription>
+          <CardTitle>Conversant - Stage 4 TTS</CardTitle>
+          <CardDescription>VAD capture, STT, LLM response, TTS synthesis, and playback.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
           <Badge className="w-[170px] justify-center font-mono" variant={stateVariant}>
@@ -824,13 +1364,47 @@ export default function Home() {
                 {activeConfig.endHoldMs} ms
               </div>
             </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Persona</p>
+              <div className="grid grid-cols-3 gap-2">
+                {PERSONA_ORDER.map(personaId => (
+                  <Button
+                    className="w-full"
+                    key={personaId}
+                    onClick={() => setPersona(personaId)}
+                    size="sm"
+                    variant={activePersona === personaId ? 'default' : 'outline'}
+                  >
+                    {personaId}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Voice</p>
+              <div className="grid grid-cols-3 gap-2">
+                {VOICE_ORDER.map(voice => (
+                  <Button
+                    className="w-full"
+                    key={voice}
+                    onClick={() => setVoice(voice)}
+                    size="sm"
+                    variant={activeVoice === voice ? 'default' : 'outline'}
+                  >
+                    {voice}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>Debug Panel</CardTitle>
-            <CardDescription>Latest utterance metadata, transcription, and local playback.</CardDescription>
+            <CardDescription>Utterance metadata, transcript, and LLM response diagnostics.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
@@ -844,6 +1418,18 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">STT ms</span>
               <span>{sttLatencyMs ?? '--'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">LLM ms</span>
+              <span>{llmLatencyMs ?? '--'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">TTS ms</span>
+              <span>{ttsLatencyMs ?? '--'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Voice</span>
+              <span>{activeVoice}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Audio context</span>
@@ -868,9 +1454,14 @@ export default function Home() {
             </div>
 
             <div className="space-y-1 rounded border bg-muted/30 p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">Assistant text (runtime)</p>
+              <p>{lastAssistantText || '--'}</p>
+            </div>
+
+            <div className="space-y-1 rounded border bg-muted/30 p-3">
               <p className="text-xs font-medium uppercase text-muted-foreground">Last recording</p>
               {lastUtterance ? (
-                // biome-ignore lint/a11y/useMediaCaption: Debug playback for raw user recording has no caption track in stage 2.
+                // biome-ignore lint/a11y/useMediaCaption: Debug playback for raw user recording has no caption track.
                 <audio className="w-full" controls preload="metadata" src={lastUtterance.url} />
               ) : (
                 <p className="text-muted-foreground">No utterance captured yet.</p>
