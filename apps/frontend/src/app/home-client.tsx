@@ -12,6 +12,7 @@ import {
 import { MessageCircleCheck, Settings, Speech } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import AudioOscilloscopeVisualizer from '@/components/audio/audio-oscilloscope-visualizer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ import { cn } from '@/lib/utils'
 
 type SectionId = 'conversation' | 'messages' | 'settings'
 type FeedRole = 'user' | 'assistant'
+type TranscriptRole = 'user' | 'assistant' | 'system'
 
 type FeedMessage = {
   id: string
@@ -27,6 +29,25 @@ type FeedMessage = {
   text: string
   turnId: string
   createdAtMs: number
+}
+
+type TranscriptMessage = {
+  id: string
+  role: TranscriptRole
+  text: string
+  turnId: string | null
+  createdAtMs: number
+}
+
+type TranscriptResponse = {
+  conversationId: string
+  messages: Array<{
+    id: string
+    role: TranscriptRole
+    content: string
+    turnId: string | null
+    createdAt: string
+  }>
 }
 
 type SectionConfig = {
@@ -116,12 +137,35 @@ function resolveFeedRoleLabel(role: FeedRole): string {
   return role === 'assistant' ? 'Assistant' : 'You'
 }
 
+function resolveTranscriptRoleLabel(role: TranscriptRole): string {
+  if (role === 'assistant') {
+    return 'Assistant'
+  }
+  if (role === 'system') {
+    return 'System'
+  }
+
+  return 'You'
+}
+
+function isNoSpeechNotice(notice: string | null): boolean {
+  if (!notice) {
+    return false
+  }
+
+  return notice.toLowerCase().includes('no speech detected')
+}
+
 export function HomeClient() {
   const router = useRouter()
   const [activeSection, setActiveSection] = useState<SectionId>('conversation')
   const [elapsedSec, setElapsedSec] = useState(0)
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
+  const [transcriptMessages, setTranscriptMessages] = useState<TranscriptMessage[]>([])
+  const [transcriptStatus, setTranscriptStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [transcriptError, setTranscriptError] = useState<string | null>(null)
   const appendedTurnIdsRef = useRef<Set<string>>(new Set())
+  const transcriptRequestIdRef = useRef(0)
   const conversationFeedScrollRef = useRef<HTMLDivElement | null>(null)
 
   const handleConversationExpired = useCallback(
@@ -144,9 +188,7 @@ export function HomeClient() {
     sttLanguageMode,
     selectedSttLanguages,
     lastUtterance,
-    lastTranscript,
-    lastAssistantText,
-    lastTurnId,
+    lastCompletedTurn,
     sttLatencyMs,
     llmLatencyMs,
     ttsLatencyMs,
@@ -183,46 +225,143 @@ export function HomeClient() {
     }
   }, [conversationId])
 
+  const transcriptRefreshKey = lastCompletedTurn?.turnId ?? ''
+
   useEffect(() => {
     if (!conversationId) {
       return
     }
 
     setFeedMessages([])
+    setTranscriptMessages([])
+    setTranscriptStatus('idle')
+    setTranscriptError(null)
     appendedTurnIdsRef.current.clear()
   }, [conversationId])
 
+  const loadTranscript = useCallback(async (targetConversationId: string, refreshKey?: string | null) => {
+    const requestId = transcriptRequestIdRef.current + 1
+    transcriptRequestIdRef.current = requestId
+    setTranscriptStatus('loading')
+    setTranscriptError(null)
+
+    try {
+      const params = new URLSearchParams({
+        conversationId: targetConversationId,
+      })
+      if (typeof refreshKey === 'string' && refreshKey.length > 0) {
+        params.set('refresh', refreshKey)
+      }
+
+      const response = await fetch(`/api/conversation/transcript?${params.toString()}`, {
+        cache: 'no-store',
+      })
+
+      if (!response.ok) {
+        const fallbackMessage = `Failed to load transcript (${response.status})`
+        let message = fallbackMessage
+        try {
+          const body: unknown = await response.json()
+          if (typeof body === 'object' && body !== null && 'error' in body) {
+            const errorValue = body.error
+            if (
+              typeof errorValue === 'object' &&
+              errorValue !== null &&
+              'message' in errorValue &&
+              typeof errorValue.message === 'string' &&
+              errorValue.message.trim().length > 0
+            ) {
+              message = errorValue.message
+            }
+          }
+        } catch {
+          message = fallbackMessage
+        }
+
+        throw new Error(message)
+      }
+
+      const payload = (await response.json()) as TranscriptResponse
+      const mappedMessages: TranscriptMessage[] = payload.messages.map(message => {
+        const parsed = Date.parse(message.createdAt)
+        return {
+          id: message.id,
+          role: message.role,
+          text: message.content,
+          turnId: message.turnId,
+          createdAtMs: Number.isNaN(parsed) ? Date.now() : parsed,
+        }
+      })
+
+      if (transcriptRequestIdRef.current !== requestId) {
+        return
+      }
+
+      setTranscriptMessages(mappedMessages)
+      setTranscriptStatus('ready')
+      setTranscriptError(null)
+    } catch (error) {
+      if (transcriptRequestIdRef.current !== requestId) {
+        return
+      }
+
+      const message = error instanceof Error ? error.message : 'Failed to load transcript'
+      setTranscriptStatus('error')
+      setTranscriptError(message)
+    }
+  }, [])
+
   useEffect(() => {
-    if (!lastTurnId || !lastTranscript || !lastAssistantText) {
+    if (activeSection !== 'messages' || !conversationId) {
       return
     }
 
-    if (appendedTurnIdsRef.current.has(lastTurnId)) {
+    void loadTranscript(conversationId, transcriptRefreshKey)
+  }, [activeSection, conversationId, loadTranscript, transcriptRefreshKey])
+
+  useEffect(() => {
+    if (!isNoSpeechNotice(lastNotice)) {
+      return
+    }
+
+    toast.warning(lastNotice, {
+      duration: 2800,
+      id: 'no-speech-warning',
+    })
+  }, [lastNotice])
+
+  useEffect(() => {
+    if (!lastCompletedTurn) {
+      return
+    }
+
+    if (appendedTurnIdsRef.current.has(lastCompletedTurn.turnId)) {
       return
     }
 
     const createdAtMs = Date.now()
-    appendedTurnIdsRef.current.add(lastTurnId)
+    appendedTurnIdsRef.current.add(lastCompletedTurn.turnId)
     setFeedMessages(previous => [
       ...previous,
       {
-        id: `${lastTurnId}:user`,
+        id: `${lastCompletedTurn.turnId}:user`,
         role: 'user',
-        text: lastTranscript,
-        turnId: lastTurnId,
+        text: lastCompletedTurn.transcript,
+        turnId: lastCompletedTurn.turnId,
         createdAtMs,
       },
       {
-        id: `${lastTurnId}:assistant`,
+        id: `${lastCompletedTurn.turnId}:assistant`,
         role: 'assistant',
-        text: lastAssistantText,
-        turnId: lastTurnId,
+        text: lastCompletedTurn.assistantText,
+        turnId: lastCompletedTurn.turnId,
         createdAtMs,
       },
     ])
-  }, [lastAssistantText, lastTranscript, lastTurnId])
+  }, [lastCompletedTurn])
 
   const totalFeedMessages = feedMessages.length
+  const inlineNotice = isNoSpeechNotice(lastNotice) ? null : lastNotice
 
   useEffect(() => {
     if (totalFeedMessages === 0) {
@@ -375,21 +514,53 @@ export function HomeClient() {
               <CardDescription>История текущей сессии с авторами и временными метками.</CardDescription>
             </CardHeader>
             <CardContent>
-              {feedMessages.length > 0 ? (
+              {!conversationId ? (
+                <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
+                  Сессия ещё не начата. Откройте вкладку «Беседа», чтобы начать диалог.
+                </p>
+              ) : transcriptStatus === 'loading' && transcriptMessages.length === 0 ? (
+                <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
+                  Загружаю историю сообщений...
+                </p>
+              ) : transcriptStatus === 'error' ? (
                 <div className="space-y-3">
-                  {feedMessages.map(message => (
+                  <p className="px-3 py-3 border rounded-xl text-destructive text-sm">
+                    {transcriptError ?? 'Не удалось загрузить историю сообщений.'}
+                  </p>
+                  <Button
+                    onClick={() => void loadTranscript(conversationId, transcriptRefreshKey)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Повторить загрузку
+                  </Button>
+                </div>
+              ) : transcriptMessages.length > 0 ? (
+                <div className="space-y-3">
+                  {transcriptMessages.map(message => (
                     <article
-                      className={cn('flex', message.role === 'assistant' ? 'justify-start' : 'justify-end')}
+                      className={cn(
+                        'flex',
+                        message.role === 'assistant'
+                          ? 'justify-start'
+                          : message.role === 'system'
+                            ? 'justify-center'
+                            : 'justify-end',
+                      )}
                       key={message.id}
                     >
                       <div
                         className={cn(
                           'px-4 py-3 border rounded-2xl max-w-[82%] w-full',
-                          message.role === 'assistant' ? 'bg-card' : 'bg-secondary',
+                          message.role === 'assistant'
+                            ? 'bg-card'
+                            : message.role === 'system'
+                              ? 'bg-muted/40 border-dashed'
+                              : 'bg-secondary',
                         )}
                       >
                         <p className="mb-1 text-muted-foreground text-xs">
-                          {resolveFeedRoleLabel(message.role)} • {formatClockTime(message.createdAtMs)}
+                          {resolveTranscriptRoleLabel(message.role)} • {formatClockTime(message.createdAtMs)}
                         </p>
                         <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                       </div>
@@ -398,7 +569,7 @@ export function HomeClient() {
                 </div>
               ) : (
                 <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
-                  История пуста. Сообщения начнут отображаться после первого успешного turn.
+                  История пуста. Сообщения появятся после первого завершённого turn.
                 </p>
               )}
             </CardContent>
@@ -532,11 +703,11 @@ export function HomeClient() {
         </section>
       ) : null}
 
-      {(lastNotice || lastError) && activeSection !== 'settings' ? (
+      {(inlineNotice || lastError) && activeSection !== 'settings' ? (
         <Card>
           <CardContent className="space-y-2 py-2">
-            {lastNotice ? (
-              <p className="bg-muted/40 px-3 py-2 border rounded text-muted-foreground text-sm">{lastNotice}</p>
+            {inlineNotice ? (
+              <p className="bg-muted/40 px-3 py-2 border rounded text-muted-foreground text-sm">{inlineNotice}</p>
             ) : null}
             {lastError ? <p className="px-3 py-2 border rounded text-destructive text-sm">{lastError}</p> : null}
           </CardContent>

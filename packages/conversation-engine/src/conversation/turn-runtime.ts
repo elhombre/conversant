@@ -5,6 +5,7 @@ import type {
   AudioCtxState,
   CaptureStage,
   ConversationState,
+  LastCompletedTurn,
   PersonaId,
   SttLanguageCode,
   SttLanguageMode,
@@ -42,6 +43,7 @@ export type TurnRuntime = {
   setLastTranscript: Dispatch<SetStateAction<string>>
   setLastAssistantText: Dispatch<SetStateAction<string>>
   setLastTurnId: Dispatch<SetStateAction<string>>
+  setLastCompletedTurn: Dispatch<SetStateAction<LastCompletedTurn | null>>
   setLastDetectedLanguage: Dispatch<SetStateAction<string | null>>
   setSttLatencyMs: Dispatch<SetStateAction<number | null>>
   setLlmLatencyMs: Dispatch<SetStateAction<number | null>>

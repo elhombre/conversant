@@ -21,6 +21,7 @@ export function useConversationStore() {
     setLastTranscript: conversationState.setLastTranscript,
     setLastAssistantText: conversationState.setLastAssistantText,
     setLastTurnId: conversationState.setLastTurnId,
+    setLastCompletedTurn: conversationState.setLastCompletedTurn,
     setLastDetectedLanguage: conversationState.setLastDetectedLanguage,
     setSttLatencyMs: conversationState.setSttLatencyMs,
     setLlmLatencyMs: conversationState.setLlmLatencyMs,

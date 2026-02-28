@@ -19,6 +19,20 @@ import type { TurnRuntime } from './turn-runtime'
 
 const MAX_CLIENT_CHAT_HISTORY_MESSAGES = 24
 
+function waitForUiPaint(): Promise<void> {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    return Promise.resolve()
+  }
+
+  return new Promise(resolve => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resolve()
+      })
+    })
+  })
+}
+
 function hasTextPayload(
   payload: unknown,
 ): payload is { text: string; latencyMs?: number; detectedLanguage?: string | null } {
@@ -164,6 +178,11 @@ export function useTurnHandlers(runtime: TurnRuntime) {
         }
 
         runtime.setLastAssistantText(result.payload.text)
+        runtime.setLastCompletedTurn({
+          turnId,
+          transcript,
+          assistantText: result.payload.text,
+        })
         runtime.setLastError(null)
         runtime.setLlmLatencyMs(
           typeof result.payload.latencyMs === 'number' ? result.payload.latencyMs : result.elapsedMs,
@@ -183,6 +202,7 @@ export function useTurnHandlers(runtime: TurnRuntime) {
         runtime.setState('processing')
         runtime.setCaptureStage('finalizing')
 
+        await waitForUiPaint()
         await runTtsForTurn(turnId, result.payload.text, sessionToken)
       } catch {
         if (isTurnStale(runtime, turnId, sessionToken)) {
@@ -225,6 +245,9 @@ export function useTurnHandlers(runtime: TurnRuntime) {
       }, STT_REQUEST_TIMEOUT_MS)
 
       runtime.setLastTurnId(turnId)
+      runtime.setLastTranscript('')
+      runtime.setLastAssistantText('')
+      runtime.setLastCompletedTurn(null)
 
       const nextLanguageMode = runtime.sttLanguageModeRef.current
       const nextAllowedLanguages = runtime.selectedSttLanguagesRef.current

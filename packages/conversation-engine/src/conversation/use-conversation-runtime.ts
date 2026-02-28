@@ -9,6 +9,7 @@ import type {
   AudioCtxState,
   CaptureStage,
   ConversationState,
+  LastCompletedTurn,
   LastUtterance,
   MicStatus,
   PendingUtteranceMeta,
@@ -39,6 +40,7 @@ type UseConversationRuntimeParams = {
   setLastTranscript: Dispatch<SetStateAction<string>>
   setLastAssistantText: Dispatch<SetStateAction<string>>
   setLastTurnId: Dispatch<SetStateAction<string>>
+  setLastCompletedTurn: Dispatch<SetStateAction<LastCompletedTurn | null>>
   setLastDetectedLanguage: Dispatch<SetStateAction<string | null>>
   setSttLatencyMs: Dispatch<SetStateAction<number | null>>
   setLlmLatencyMs: Dispatch<SetStateAction<number | null>>
@@ -60,6 +62,7 @@ export function useConversationRuntime({
   setLastTranscript,
   setLastAssistantText,
   setLastTurnId,
+  setLastCompletedTurn,
   setLastDetectedLanguage,
   setSttLatencyMs,
   setLlmLatencyMs,
@@ -389,6 +392,7 @@ export function useConversationRuntime({
       setLastTranscript('')
       setLastAssistantText('')
       setLastTurnId('')
+      setLastCompletedTurn(null)
       setLastDetectedLanguage(null)
       setSttLatencyMs(null)
       setLlmLatencyMs(null)
@@ -416,6 +420,7 @@ export function useConversationRuntime({
       setLastNotice,
       setLastTranscript,
       setLastTurnId,
+      setLastCompletedTurn,
       setLlmLatencyMs,
       setState,
       setSttLatencyMs,

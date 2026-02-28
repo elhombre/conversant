@@ -5,6 +5,7 @@ import type {
   AudioCtxState,
   CaptureStage,
   ConversationState,
+  LastCompletedTurn,
   LastUtterance,
   MicStatus,
   PersonaId,
@@ -33,6 +34,7 @@ export function useConversationState() {
   const [lastTranscript, setLastTranscript] = useState('')
   const [lastAssistantText, setLastAssistantText] = useState('')
   const [lastTurnId, setLastTurnId] = useState('')
+  const [lastCompletedTurn, setLastCompletedTurn] = useState<LastCompletedTurn | null>(null)
   const [lastDetectedLanguage, setLastDetectedLanguage] = useState<string | null>(null)
   const [sttLatencyMs, setSttLatencyMs] = useState<number | null>(null)
   const [llmLatencyMs, setLlmLatencyMs] = useState<number | null>(null)
@@ -95,6 +97,8 @@ export function useConversationState() {
     setLastAssistantText,
     lastTurnId,
     setLastTurnId,
+    lastCompletedTurn,
+    setLastCompletedTurn,
     lastDetectedLanguage,
     setLastDetectedLanguage,
     sttLatencyMs,

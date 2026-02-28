@@ -31,6 +31,12 @@ export type LastUtterance = {
   preset: VadPreset
 }
 
+export type LastCompletedTurn = {
+  turnId: string
+  transcript: string
+  assistantText: string
+}
+
 export type PendingUtteranceMeta = {
   token: number
   sessionToken: number
