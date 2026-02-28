@@ -11,7 +11,8 @@
   "scripts": {
     "lint": "biome check",
     "format": "biome format --write",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "openai": "^6.25.0"
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.4",
     "@types/node": "^20",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.8"
   }
 }
