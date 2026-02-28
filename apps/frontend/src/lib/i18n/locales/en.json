@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "conversation": "Conversation",
+    "messages": "Messages",
+    "settings": "Settings"
+  },
+  "badges": {
+    "state": "State",
+    "mic": "Mic",
+    "session": "Session",
+    "muted": "Muted",
+    "live": "Live"
+  },
+  "state": {
+    "assistant_speaking": "Speaking",
+    "processing": "Processing",
+    "user_speaking": "Listening",
+    "error": "Error",
+    "listening": "Ready"
+  },
+  "mic": {
+    "ready": "Connected",
+    "requesting": "Requesting",
+    "denied": "Denied",
+    "error": "Error",
+    "idle": "Idle"
+  },
+  "roles": {
+    "assistant": "Assistant",
+    "you": "You",
+    "system": "System"
+  },
+  "conversation": {
+    "title": "Conversation",
+    "description": "Tap the visualizer to quickly mute or resume microphone.",
+    "ariaResumeMic": "Resume microphone",
+    "ariaMuteMic": "Mute microphone",
+    "micPaused": "Mic paused",
+    "micActive": "Mic active",
+    "inputLevelSuffix": "% input level",
+    "empty": "No messages yet. Start speaking to see the live dialog."
+  },
+  "messages": {
+    "title": "Messages",
+    "description": "History of the current session with authors and timestamps.",
+    "sessionNotStarted": "Session has not started yet. Open Conversation tab to begin.",
+    "loading": "Loading message history...",
+    "loadErrorDefault": "Failed to load message history.",
+    "retry": "Retry",
+    "empty": "History is empty. Messages will appear after first completed turn."
+  },
+  "settings": {
+    "appearance": {
+      "title": "Appearance & Language",
+      "description": "Theme and interface language.",
+      "theme": "Theme",
+      "themeSystem": "System",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "language": "Language",
+      "languageEn": "English",
+      "languageRu": "Russian"
+    },
+    "session": {
+      "title": "Session",
+      "description": "Basic actions and current audio state.",
+      "muteResume": "Mute / Resume",
+      "resetSession": "Reset Session",
+      "reconnectMic": "Reconnect Mic",
+      "clearRecording": "Clear Recording",
+      "capture": "capture",
+      "mic": "mic"
+    },
+    "voice": {
+      "title": "Assistant Voice",
+      "description": "Persona and voice for TTS.",
+      "persona": "Persona",
+      "voice": "Voice"
+    },
+    "stt": {
+      "title": "Speech Recognition",
+      "description": "Language filter and STT mode.",
+      "languageFilter": "Language filter",
+      "strict": "strict",
+      "offFaster": "off (faster)"
+    },
+    "sensitivity": {
+      "title": "Sensitivity",
+      "description": "VAD preset and technical parameters.",
+      "threshold": "threshold",
+      "startHold": "startHold",
+      "endHold": "endHold",
+      "stt": "STT",
+      "llm": "LLM",
+      "tts": "TTS"
+    }
+  },
+  "toast": {
+    "noSpeechDetected": "No speech detected. Try speaking a bit longer."
+  }
+}

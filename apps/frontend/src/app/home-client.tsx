@@ -11,17 +11,20 @@ import {
 } from '@conversant/conversation-engine'
 import { MessageCircleCheck, Settings, Speech } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import AudioOscilloscopeVisualizer from '@/components/audio/audio-oscilloscope-visualizer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { UI_DICTIONARIES, UI_LOCALE_STORAGE_KEY, type UiLocale } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type SectionId = 'conversation' | 'messages' | 'settings'
 type FeedRole = 'user' | 'assistant'
 type TranscriptRole = 'user' | 'assistant' | 'system'
+type ThemeMode = 'system' | 'light' | 'dark'
 
 type FeedMessage = {
   id: string
@@ -52,24 +55,20 @@ type TranscriptResponse = {
 
 type SectionConfig = {
   id: SectionId
-  label: string
   icon: typeof Speech
 }
 
 const SECTIONS: SectionConfig[] = [
   {
     id: 'conversation',
-    label: 'Беседа',
     icon: Speech,
   },
   {
     id: 'messages',
-    label: 'Сообщения',
     icon: MessageCircleCheck,
   },
   {
     id: 'settings',
-    label: 'Настройки',
     icon: Settings,
   },
 ]
@@ -89,33 +88,36 @@ function formatClockTime(timestampMs: number): string {
   }).format(new Date(timestampMs))
 }
 
-function resolveConversationStateLabel(state: ConversationState): string {
+function resolveConversationStateLabel(
+  state: ConversationState,
+  labels: (typeof UI_DICTIONARIES)['en']['state'],
+): string {
   switch (state) {
     case 'assistant_speaking':
-      return 'Speaking'
+      return labels.assistant_speaking
     case 'processing':
-      return 'Processing'
+      return labels.processing
     case 'user_speaking':
-      return 'Listening'
+      return labels.user_speaking
     case 'error':
-      return 'Error'
+      return labels.error
     case 'listening':
-      return 'Ready'
+      return labels.listening
   }
 }
 
-function resolveMicStatusLabel(status: MicStatus): string {
+function resolveMicStatusLabel(status: MicStatus, labels: (typeof UI_DICTIONARIES)['en']['mic']): string {
   switch (status) {
     case 'ready':
-      return 'Connected'
+      return labels.ready
     case 'requesting':
-      return 'Requesting'
+      return labels.requesting
     case 'denied':
-      return 'Denied'
+      return labels.denied
     case 'error':
-      return 'Error'
+      return labels.error
     case 'idle':
-      return 'Idle'
+      return labels.idle
   }
 }
 
@@ -133,19 +135,19 @@ function resolveStateBadgeVariant(state: ConversationState): 'default' | 'second
   return 'default'
 }
 
-function resolveFeedRoleLabel(role: FeedRole): string {
-  return role === 'assistant' ? 'Assistant' : 'You'
+function resolveFeedRoleLabel(role: FeedRole, labels: (typeof UI_DICTIONARIES)['en']['roles']): string {
+  return role === 'assistant' ? labels.assistant : labels.you
 }
 
-function resolveTranscriptRoleLabel(role: TranscriptRole): string {
+function resolveTranscriptRoleLabel(role: TranscriptRole, labels: (typeof UI_DICTIONARIES)['en']['roles']): string {
   if (role === 'assistant') {
-    return 'Assistant'
+    return labels.assistant
   }
   if (role === 'system') {
-    return 'System'
+    return labels.system
   }
 
-  return 'You'
+  return labels.you
 }
 
 function isNoSpeechNotice(notice: string | null): boolean {
@@ -156,9 +158,39 @@ function isNoSpeechNotice(notice: string | null): boolean {
   return notice.toLowerCase().includes('no speech detected')
 }
 
+function resolveInitialLocale(): UiLocale {
+  if (typeof window === 'undefined') {
+    return 'en'
+  }
+
+  const stored = window.localStorage.getItem(UI_LOCALE_STORAGE_KEY)
+  if (stored === 'en' || stored === 'ru') {
+    return stored
+  }
+
+  const browserLanguage = window.navigator.language.toLowerCase()
+  return browserLanguage.startsWith('ru') ? 'ru' : 'en'
+}
+
+function resolveSectionLabel(sectionId: SectionId, locale: UiLocale): string {
+  const dictionary = UI_DICTIONARIES[locale]
+  switch (sectionId) {
+    case 'conversation':
+      return dictionary.nav.conversation
+    case 'messages':
+      return dictionary.nav.messages
+    case 'settings':
+      return dictionary.nav.settings
+  }
+}
+
 export function HomeClient() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
   const [activeSection, setActiveSection] = useState<SectionId>('conversation')
+  const [locale, setLocale] = useState<UiLocale>('en')
+  const [localeReady, setLocaleReady] = useState(false)
+  const [themeReady, setThemeReady] = useState(false)
   const [elapsedSec, setElapsedSec] = useState(0)
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
   const [transcriptMessages, setTranscriptMessages] = useState<TranscriptMessage[]>([])
@@ -210,6 +242,20 @@ export function HomeClient() {
   })
 
   useEffect(() => {
+    setLocale(resolveInitialLocale())
+    setLocaleReady(true)
+    setThemeReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!localeReady) {
+      return
+    }
+
+    window.localStorage.setItem(UI_LOCALE_STORAGE_KEY, locale)
+  }, [locale, localeReady])
+
+  useEffect(() => {
     if (!conversationId) {
       return
     }
@@ -226,6 +272,8 @@ export function HomeClient() {
   }, [conversationId])
 
   const transcriptRefreshKey = lastCompletedTurn?.turnId ?? ''
+  const dictionary = UI_DICTIONARIES[locale]
+  const activeTheme: ThemeMode = theme === 'light' || theme === 'dark' ? theme : 'system'
 
   useEffect(() => {
     if (!conversationId) {
@@ -324,11 +372,11 @@ export function HomeClient() {
       return
     }
 
-    toast.warning(lastNotice, {
+    toast.warning(dictionary.toast.noSpeechDetected, {
       duration: 2800,
       id: 'no-speech-warning',
     })
-  }, [lastNotice])
+  }, [dictionary.toast.noSpeechDetected, lastNotice])
 
   useEffect(() => {
     if (!lastCompletedTurn) {
@@ -362,6 +410,12 @@ export function HomeClient() {
 
   const totalFeedMessages = feedMessages.length
   const inlineNotice = isNoSpeechNotice(lastNotice) ? null : lastNotice
+  const setThemeMode = useCallback(
+    (mode: ThemeMode) => {
+      setTheme(mode)
+    },
+    [setTheme],
+  )
 
   useEffect(() => {
     if (totalFeedMessages === 0) {
@@ -405,7 +459,7 @@ export function HomeClient() {
                 variant="ghost"
               >
                 <Icon className="size-4" />
-                <span className="hidden sm:inline ml-2">{section.label}</span>
+                <span className="hidden sm:inline ml-2">{resolveSectionLabel(section.id, locale)}</span>
               </Button>
             )
           })}
@@ -416,25 +470,29 @@ export function HomeClient() {
         <section className="flex-1 flex-col flex gap-3 min-h-0 overflow-hidden">
           <Card>
             <CardHeader className="space-y-1 pb-2">
-              <CardTitle>Беседа</CardTitle>
-              <CardDescription className="sm:block hidden">
-                Нажмите на визуализатор, чтобы быстро выключить или включить микрофон.
-              </CardDescription>
+              <CardTitle>{dictionary.conversation.title}</CardTitle>
+              <CardDescription className="sm:block hidden">{dictionary.conversation.description}</CardDescription>
             </CardHeader>
             <CardContent className="flex-wrap flex gap-2 items-center">
-              <Badge variant={resolveStateBadgeVariant(state)}>State: {resolveConversationStateLabel(state)}</Badge>
-              <Badge variant={micStatus === 'ready' ? 'secondary' : 'outline'}>
-                Mic: {resolveMicStatusLabel(micStatus)}
+              <Badge variant={resolveStateBadgeVariant(state)}>
+                {dictionary.badges.state}: {resolveConversationStateLabel(state, dictionary.state)}
               </Badge>
-              <Badge variant={isMuted ? 'destructive' : 'outline'}>{isMuted ? 'Muted' : 'Live'}</Badge>
-              <Badge variant="outline">Session: {formatDuration(elapsedSec)}</Badge>
+              <Badge variant={micStatus === 'ready' ? 'secondary' : 'outline'}>
+                {dictionary.badges.mic}: {resolveMicStatusLabel(micStatus, dictionary.mic)}
+              </Badge>
+              <Badge variant={isMuted ? 'destructive' : 'outline'}>
+                {isMuted ? dictionary.badges.muted : dictionary.badges.live}
+              </Badge>
+              <Badge variant="outline">
+                {dictionary.badges.session}: {formatDuration(elapsedSec)}
+              </Badge>
             </CardContent>
           </Card>
 
           <Card className="relative flex-1 min-h-0 overflow-hidden">
             <CardContent className="relative p-0 h-full">
               <button
-                aria-label={isMuted ? 'Resume microphone' : 'Mute microphone'}
+                aria-label={isMuted ? dictionary.conversation.ariaResumeMic : dictionary.conversation.ariaMuteMic}
                 className="absolute group inset-0 flex items-center justify-center"
                 onClick={toggleMute}
                 type="button"
@@ -466,8 +524,13 @@ export function HomeClient() {
                   />
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="backdrop-blur bg-card/80 shadow-xl px-4 py-2 border rounded-full">
-                      <p className="font-medium text-sm">{isMuted ? 'Mic paused' : 'Mic active'}</p>
-                      <p className="text-muted-foreground text-xs">{Math.round(visibleLevel * 100)}% input level</p>
+                      <p className="font-medium text-sm">
+                        {isMuted ? dictionary.conversation.micPaused : dictionary.conversation.micActive}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {Math.round(visibleLevel * 100)}
+                        {dictionary.conversation.inputLevelSuffix}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -489,7 +552,8 @@ export function HomeClient() {
                         key={message.id}
                       >
                         <p className="mb-0.5 text-[11px] text-muted-foreground">
-                          {resolveFeedRoleLabel(message.role)} • {formatClockTime(message.createdAtMs)}
+                          {resolveFeedRoleLabel(message.role, dictionary.roles)} •{' '}
+                          {formatClockTime(message.createdAtMs)}
                         </p>
                         <p className="whitespace-pre-wrap">{message.text}</p>
                       </div>
@@ -498,7 +562,7 @@ export function HomeClient() {
                 </div>
               ) : (
                 <p className="bg-card/70 px-3 py-2 border rounded-xl text-muted-foreground text-sm">
-                  Сообщений пока нет. Начните говорить, чтобы увидеть ход диалога.
+                  {dictionary.conversation.empty}
                 </p>
               )}
             </CardContent>
@@ -510,29 +574,29 @@ export function HomeClient() {
         <section className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Сообщения</CardTitle>
-              <CardDescription>История текущей сессии с авторами и временными метками.</CardDescription>
+              <CardTitle>{dictionary.messages.title}</CardTitle>
+              <CardDescription>{dictionary.messages.description}</CardDescription>
             </CardHeader>
             <CardContent>
               {!conversationId ? (
                 <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
-                  Сессия ещё не начата. Откройте вкладку «Беседа», чтобы начать диалог.
+                  {dictionary.messages.sessionNotStarted}
                 </p>
               ) : transcriptStatus === 'loading' && transcriptMessages.length === 0 ? (
                 <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
-                  Загружаю историю сообщений...
+                  {dictionary.messages.loading}
                 </p>
               ) : transcriptStatus === 'error' ? (
                 <div className="space-y-3">
                   <p className="px-3 py-3 border rounded-xl text-destructive text-sm">
-                    {transcriptError ?? 'Не удалось загрузить историю сообщений.'}
+                    {transcriptError ?? dictionary.messages.loadErrorDefault}
                   </p>
                   <Button
                     onClick={() => void loadTranscript(conversationId, transcriptRefreshKey)}
                     size="sm"
                     variant="outline"
                   >
-                    Повторить загрузку
+                    {dictionary.messages.retry}
                   </Button>
                 </div>
               ) : transcriptMessages.length > 0 ? (
@@ -560,7 +624,8 @@ export function HomeClient() {
                         )}
                       >
                         <p className="mb-1 text-muted-foreground text-xs">
-                          {resolveTranscriptRoleLabel(message.role)} • {formatClockTime(message.createdAtMs)}
+                          {resolveTranscriptRoleLabel(message.role, dictionary.roles)} •{' '}
+                          {formatClockTime(message.createdAtMs)}
                         </p>
                         <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                       </div>
@@ -569,7 +634,7 @@ export function HomeClient() {
                 </div>
               ) : (
                 <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
-                  История пуста. Сообщения появятся после первого завершённого turn.
+                  {dictionary.messages.empty}
                 </p>
               )}
             </CardContent>
@@ -581,26 +646,87 @@ export function HomeClient() {
         <section className="gap-4 md:grid-cols-2 grid">
           <Card>
             <CardHeader>
-              <CardTitle>Сессия</CardTitle>
-              <CardDescription>Базовые действия и текущее состояние аудио.</CardDescription>
+              <CardTitle>{dictionary.settings.appearance.title}</CardTitle>
+              <CardDescription>{dictionary.settings.appearance.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <p className="font-medium text-sm">{dictionary.settings.appearance.theme}</p>
+                <div className="gap-2 grid-cols-3 grid">
+                  <Button
+                    disabled={!themeReady}
+                    onClick={() => setThemeMode('system')}
+                    size="sm"
+                    variant={activeTheme === 'system' ? 'default' : 'outline'}
+                  >
+                    {dictionary.settings.appearance.themeSystem}
+                  </Button>
+                  <Button
+                    disabled={!themeReady}
+                    onClick={() => setThemeMode('light')}
+                    size="sm"
+                    variant={activeTheme === 'light' ? 'default' : 'outline'}
+                  >
+                    {dictionary.settings.appearance.themeLight}
+                  </Button>
+                  <Button
+                    disabled={!themeReady}
+                    onClick={() => setThemeMode('dark')}
+                    size="sm"
+                    variant={activeTheme === 'dark' ? 'default' : 'outline'}
+                  >
+                    {dictionary.settings.appearance.themeDark}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="font-medium text-sm">{dictionary.settings.appearance.language}</p>
+                <div className="gap-2 grid-cols-2 grid">
+                  <Button
+                    disabled={!localeReady}
+                    onClick={() => setLocale('en')}
+                    size="sm"
+                    variant={locale === 'en' ? 'default' : 'outline'}
+                  >
+                    {dictionary.settings.appearance.languageEn}
+                  </Button>
+                  <Button
+                    disabled={!localeReady}
+                    onClick={() => setLocale('ru')}
+                    size="sm"
+                    variant={locale === 'ru' ? 'default' : 'outline'}
+                  >
+                    {dictionary.settings.appearance.languageRu}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{dictionary.settings.session.title}</CardTitle>
+              <CardDescription>{dictionary.settings.session.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="gap-2 grid-cols-2 grid">
                 <Button onClick={toggleMute} variant={isMuted ? 'secondary' : 'destructive'}>
-                  Mute / Resume
+                  {dictionary.settings.session.muteResume}
                 </Button>
                 <Button onClick={resetSession} variant="outline">
-                  Reset Session
+                  {dictionary.settings.session.resetSession}
                 </Button>
                 <Button onClick={reconnectMicrophone} variant="secondary">
-                  Reconnect Mic
+                  {dictionary.settings.session.reconnectMic}
                 </Button>
                 <Button disabled={isMuted || micStatus !== 'ready'} onClick={releaseUtteranceUrl}>
-                  Clear Recording
+                  {dictionary.settings.session.clearRecording}
                 </Button>
               </div>
               <div className="bg-muted/30 p-3 border rounded text-muted-foreground text-xs">
-                capture: {captureStage} | mic: {resolveMicStatusLabel(micStatus)}
+                {dictionary.settings.session.capture}: {captureStage} | {dictionary.settings.session.mic}:{' '}
+                {resolveMicStatusLabel(micStatus, dictionary.mic)}
               </div>
               {lastUtterance ? (
                 // biome-ignore lint/a11y/useMediaCaption: local mic preview audio has no caption track source.
@@ -611,12 +737,12 @@ export function HomeClient() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Голос ассистента</CardTitle>
-              <CardDescription>Persona и голос для TTS.</CardDescription>
+              <CardTitle>{dictionary.settings.voice.title}</CardTitle>
+              <CardDescription>{dictionary.settings.voice.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
-                <p className="font-medium text-sm">Persona</p>
+                <p className="font-medium text-sm">{dictionary.settings.voice.persona}</p>
                 <div className="gap-2 grid-cols-3 grid">
                   {PERSONA_ORDER.map(persona => (
                     <Button
@@ -631,7 +757,7 @@ export function HomeClient() {
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="font-medium text-sm">Voice</p>
+                <p className="font-medium text-sm">{dictionary.settings.voice.voice}</p>
                 <div className="gap-2 grid-cols-3 grid">
                   {VOICE_ORDER.map(voice => (
                     <Button
@@ -650,12 +776,13 @@ export function HomeClient() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Распознавание речи</CardTitle>
-              <CardDescription>Языковой фильтр и режим STT.</CardDescription>
+              <CardTitle>{dictionary.settings.stt.title}</CardTitle>
+              <CardDescription>{dictionary.settings.stt.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button onClick={toggleSttLanguageMode} variant={sttLanguageMode === 'strict' ? 'default' : 'outline'}>
-                Language filter: {sttLanguageMode === 'strict' ? 'strict' : 'off (faster)'}
+                {dictionary.settings.stt.languageFilter}:{' '}
+                {sttLanguageMode === 'strict' ? dictionary.settings.stt.strict : dictionary.settings.stt.offFaster}
               </Button>
               <div className="gap-2 grid-cols-2 grid">
                 {STT_LANGUAGE_ORDER.map(language => (
@@ -675,8 +802,8 @@ export function HomeClient() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Чувствительность</CardTitle>
-              <CardDescription>VAD пресет и технические параметры.</CardDescription>
+              <CardTitle>{dictionary.settings.sensitivity.title}</CardTitle>
+              <CardDescription>{dictionary.settings.sensitivity.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="gap-2 grid-cols-3 grid">
@@ -692,11 +819,13 @@ export function HomeClient() {
                 ))}
               </div>
               <div className="bg-muted/30 p-3 border rounded text-muted-foreground text-xs">
-                threshold: {activeConfig.thresholdDb} dB | startHold: {activeConfig.startHoldMs} ms | endHold:{' '}
-                {activeConfig.endHoldMs} ms
+                {dictionary.settings.sensitivity.threshold}: {activeConfig.thresholdDb} dB |{' '}
+                {dictionary.settings.sensitivity.startHold}: {activeConfig.startHoldMs} ms |{' '}
+                {dictionary.settings.sensitivity.endHold}: {activeConfig.endHoldMs} ms
               </div>
               <div className="bg-muted/30 p-3 border rounded text-muted-foreground text-xs">
-                STT: {sttLatencyMs ?? '--'} ms | LLM: {llmLatencyMs ?? '--'} ms | TTS: {ttsLatencyMs ?? '--'} ms
+                {dictionary.settings.sensitivity.stt}: {sttLatencyMs ?? '--'} ms | {dictionary.settings.sensitivity.llm}
+                : {llmLatencyMs ?? '--'} ms | {dictionary.settings.sensitivity.tts}: {ttsLatencyMs ?? '--'} ms
               </div>
             </CardContent>
           </Card>

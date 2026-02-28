@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "conversation": "Беседа",
+    "messages": "Сообщения",
+    "settings": "Настройки"
+  },
+  "badges": {
+    "state": "Состояние",
+    "mic": "Микрофон",
+    "session": "Сессия",
+    "muted": "Без звука",
+    "live": "Активно"
+  },
+  "state": {
+    "assistant_speaking": "Говорит",
+    "processing": "Обработка",
+    "user_speaking": "Слушает",
+    "error": "Ошибка",
+    "listening": "Готов"
+  },
+  "mic": {
+    "ready": "Подключен",
+    "requesting": "Запрос",
+    "denied": "Запрещен",
+    "error": "Ошибка",
+    "idle": "Ожидание"
+  },
+  "roles": {
+    "assistant": "Ассистент",
+    "you": "Вы",
+    "system": "Система"
+  },
+  "conversation": {
+    "title": "Беседа",
+    "description": "Нажмите на визуализатор, чтобы быстро выключить или включить микрофон.",
+    "ariaResumeMic": "Включить микрофон",
+    "ariaMuteMic": "Выключить микрофон",
+    "micPaused": "Микрофон выключен",
+    "micActive": "Микрофон активен",
+    "inputLevelSuffix": "% уровень входа",
+    "empty": "Сообщений пока нет. Начните говорить, чтобы увидеть ход диалога."
+  },
+  "messages": {
+    "title": "Сообщения",
+    "description": "История текущей сессии с авторами и временными метками.",
+    "sessionNotStarted": "Сессия еще не начата. Откройте вкладку «Беседа», чтобы начать диалог.",
+    "loading": "Загружаю историю сообщений...",
+    "loadErrorDefault": "Не удалось загрузить историю сообщений.",
+    "retry": "Повторить загрузку",
+    "empty": "История пуста. Сообщения появятся после первого завершенного turn."
+  },
+  "settings": {
+    "appearance": {
+      "title": "Оформление и язык",
+      "description": "Тема и язык интерфейса.",
+      "theme": "Тема",
+      "themeSystem": "Системная",
+      "themeLight": "Светлая",
+      "themeDark": "Темная",
+      "language": "Язык",
+      "languageEn": "English",
+      "languageRu": "Русский"
+    },
+    "session": {
+      "title": "Сессия",
+      "description": "Базовые действия и текущее состояние аудио.",
+      "muteResume": "Выключить / Включить",
+      "resetSession": "Сбросить сессию",
+      "reconnectMic": "Переподключить микрофон",
+      "clearRecording": "Очистить запись",
+      "capture": "Захват",
+      "mic": "Микрофон"
+    },
+    "voice": {
+      "title": "Голос ассистента",
+      "description": "Persona и голос для TTS.",
+      "persona": "Персона",
+      "voice": "Голос"
+    },
+    "stt": {
+      "title": "Распознавание речи",
+      "description": "Языковой фильтр и режим STT.",
+      "languageFilter": "Языковой фильтр",
+      "strict": "строгий",
+      "offFaster": "выкл (быстрее)"
+    },
+    "sensitivity": {
+      "title": "Чувствительность",
+      "description": "VAD пресет и технические параметры.",
+      "threshold": "порог",
+      "startHold": "удержание старта",
+      "endHold": "удержание конца",
+      "stt": "STT",
+      "llm": "LLM",
+      "tts": "TTS"
+    }
+  },
+  "toast": {
+    "noSpeechDetected": "Речь не обнаружена. Попробуйте говорить немного дольше."
+  }
+}
