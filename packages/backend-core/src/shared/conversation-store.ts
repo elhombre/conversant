@@ -3,10 +3,23 @@ export type ConversationMessage = {
   content: string
 }
 
+export type ConversationScope = {
+  conversationId: string
+  userId?: string
+}
+
+export type ConversationTurn = {
+  turnId: string
+  userText: string
+  assistantText: string
+  assistantModel?: string
+  assistantLatencyMs?: number
+}
+
 export type ConversationStore = {
-  getHistory: (conversationId: string) => ConversationMessage[]
-  appendTurn: (conversationId: string, userText: string, assistantText: string) => void
-  clearConversation: (conversationId: string) => void
+  getHistory: (scope: ConversationScope) => Promise<ConversationMessage[]>
+  appendTurn: (scope: ConversationScope, turn: ConversationTurn) => Promise<void>
+  clearConversation: (scope: ConversationScope) => Promise<void>
 }
 
 const MAX_HISTORY_MESSAGES = 24
@@ -14,30 +27,34 @@ const MAX_HISTORY_MESSAGES = 24
 class InMemoryConversationStore implements ConversationStore {
   private readonly messagesByConversation = new Map<string, ConversationMessage[]>()
 
-  getHistory(conversationId: string): ConversationMessage[] {
-    const history = this.messagesByConversation.get(conversationId)
+  private getConversationKey(scope: ConversationScope): string {
+    return scope.userId ? `${scope.userId}:${scope.conversationId}` : scope.conversationId
+  }
+
+  async getHistory(scope: ConversationScope): Promise<ConversationMessage[]> {
+    const history = this.messagesByConversation.get(this.getConversationKey(scope))
     return history ? [...history] : []
   }
 
-  appendTurn(conversationId: string, userText: string, assistantText: string) {
+  async appendTurn(scope: ConversationScope, turn: ConversationTurn): Promise<void> {
     const nextHistory = [
-      ...this.getHistory(conversationId),
+      ...(await this.getHistory(scope)),
       {
         role: 'user' as const,
-        content: userText,
+        content: turn.userText,
       },
       {
         role: 'assistant' as const,
-        content: assistantText,
+        content: turn.assistantText,
       },
     ]
 
     const trimmed = nextHistory.slice(-MAX_HISTORY_MESSAGES)
-    this.messagesByConversation.set(conversationId, trimmed)
+    this.messagesByConversation.set(this.getConversationKey(scope), trimmed)
   }
 
-  clearConversation(conversationId: string) {
-    this.messagesByConversation.delete(conversationId)
+  async clearConversation(scope: ConversationScope): Promise<void> {
+    this.messagesByConversation.delete(this.getConversationKey(scope))
   }
 }
 

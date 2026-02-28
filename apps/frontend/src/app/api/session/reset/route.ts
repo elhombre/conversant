@@ -1,5 +1,6 @@
 import { handleSessionResetPost } from '@conversant/backend-core'
 import { requireAuthenticatedUser } from '@/lib/auth/server'
+import { serverConversationStore } from '@/lib/conversation/server-store'
 
 export const runtime = 'nodejs'
 
@@ -9,5 +10,8 @@ export async function POST(request: Request) {
     return auth.response
   }
 
-  return handleSessionResetPost(request)
+  return handleSessionResetPost(request, {
+    userId: auth.userId,
+    conversationStore: serverConversationStore,
+  })
 }

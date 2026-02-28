@@ -1,5 +1,6 @@
 import { handleChatPost } from '@conversant/backend-core'
 import { requireAuthenticatedUser } from '@/lib/auth/server'
+import { serverConversationStore } from '@/lib/conversation/server-store'
 
 export const runtime = 'nodejs'
 
@@ -9,5 +10,8 @@ export async function POST(request: Request) {
     return auth.response
   }
 
-  return handleChatPost(request)
+  return handleChatPost(request, {
+    userId: auth.userId,
+    conversationStore: serverConversationStore,
+  })
 }

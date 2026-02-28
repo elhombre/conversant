@@ -1,7 +1,12 @@
 import type { SessionResetRequestBody, SessionResetSuccessPayload } from '@conversant/api-contracts'
-import { getConversationStore } from './shared/conversation-store'
+import { type ConversationStore, getConversationStore } from './shared/conversation-store'
 import { jsonError } from './shared/http'
 import { asRecord, readNonEmptyString } from './shared/parsing'
+
+export type SessionResetHandlerOptions = {
+  userId?: string
+  conversationStore?: ConversationStore
+}
 
 function parseBody(rawBody: unknown): SessionResetRequestBody | null {
   const body = asRecord(rawBody)
@@ -19,7 +24,7 @@ function parseBody(rawBody: unknown): SessionResetRequestBody | null {
   }
 }
 
-export async function handleSessionResetPost(request: Request) {
+export async function handleSessionResetPost(request: Request, options: SessionResetHandlerOptions = {}) {
   let rawBody: unknown
   try {
     rawBody = await request.json()
@@ -32,8 +37,15 @@ export async function handleSessionResetPost(request: Request) {
     return jsonError(400, null, 'BadRequest', 'Invalid session reset payload')
   }
 
-  const conversationStore = getConversationStore()
-  conversationStore.clearConversation(body.conversationId)
+  const conversationStore = options.conversationStore ?? getConversationStore()
+  try {
+    await conversationStore.clearConversation({
+      conversationId: body.conversationId,
+      userId: options.userId,
+    })
+  } catch {
+    return jsonError(500, null, 'InternalError', 'Failed to clear conversation state')
+  }
 
   const payload: SessionResetSuccessPayload = {
     conversationId: body.conversationId,

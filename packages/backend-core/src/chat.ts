@@ -2,7 +2,7 @@ import { type ChatHistoryMessage, type ChatRequestBody, PERSONA_IDS, type Person
 import { readOpenAIModelEnv, readOpenAIProviderEnv } from '@conversant/config'
 
 import { createRequestSignal, getAbortKind } from './shared/abort'
-import { getConversationStore } from './shared/conversation-store'
+import { type ConversationScope, type ConversationStore, getConversationStore } from './shared/conversation-store'
 import { jsonError } from './shared/http'
 import { createOpenAIClient } from './shared/openai-client'
 import {
@@ -17,6 +17,11 @@ import { asRecord, readNonEmptyString } from './shared/parsing'
 const CHAT_TIMEOUT_MS = 15_000
 const CHAT_MAX_TOKENS = 220
 const CHAT_MAX_HISTORY_MESSAGES = 24
+
+export type ChatHandlerOptions = {
+  userId?: string
+  conversationStore?: ConversationStore
+}
 
 const PERSONA_SYSTEM_PROMPTS: Record<PersonaId, string> = {
   Concise:
@@ -121,7 +126,7 @@ function mapProviderError(status: number | null, message: string) {
   }
 }
 
-export async function handleChatPost(request: Request) {
+export async function handleChatPost(request: Request, options: ChatHandlerOptions = {}) {
   const providerConfig = readOpenAIProviderEnv()
   if (!providerConfig) {
     return jsonError(500, null, 'ProviderUnavailable', 'OPENAI_API_KEY is not configured')
@@ -144,13 +149,24 @@ export async function handleChatPost(request: Request) {
   const chatModel = modelConfig.chatModel
   const personaId: PersonaId = body.personaId ?? 'Conversational'
   const systemPrompt = PERSONA_SYSTEM_PROMPTS[personaId]
-  const conversationStore = getConversationStore()
-  const serverHistory = conversationStore.getHistory(body.conversationId)
+  const conversationStore = options.conversationStore ?? getConversationStore()
+  const scope: ConversationScope = {
+    conversationId: body.conversationId,
+    userId: options.userId,
+  }
+  let serverHistory: ChatHistoryMessage[]
+  try {
+    serverHistory = await conversationStore.getHistory(scope)
+  } catch {
+    return jsonError(500, body.turnId, 'InternalError', 'Failed to load conversation history')
+  }
   const history = (serverHistory.length > 0 ? serverHistory : (body.history ?? [])).slice(-CHAT_MAX_HISTORY_MESSAGES)
 
   const client = createOpenAIClient(providerConfig)
   const startedAt = performance.now()
 
+  let text = ''
+  let llmLatencyMs = 0
   try {
     const completion = await client.chat.completions.create(
       {
@@ -171,26 +187,11 @@ export async function handleChatPost(request: Request) {
       { signal },
     )
 
-    const text = completion.choices[0]?.message?.content?.trim() ?? ''
+    text = completion.choices[0]?.message?.content?.trim() ?? ''
     if (!text) {
       return jsonError(500, body.turnId, 'InternalError', 'LLM returned empty response')
     }
-    conversationStore.appendTurn(body.conversationId, body.text, text)
-
-    return Response.json(
-      {
-        conversationId: body.conversationId,
-        turnId: body.turnId,
-        text,
-        personaId,
-        latencyMs: Math.round(performance.now() - startedAt),
-      },
-      {
-        headers: {
-          'cache-control': 'no-store',
-        },
-      },
-    )
+    llmLatencyMs = Math.round(performance.now() - startedAt)
   } catch (error) {
     const abortKind = getAbortKind(signal, request.signal)
     if (abortKind === 'cancelled') {
@@ -207,4 +208,31 @@ export async function handleChatPost(request: Request) {
 
     return jsonError(mapped.status, body.turnId, mapped.code, mapped.message)
   }
+
+  try {
+    await conversationStore.appendTurn(scope, {
+      turnId: body.turnId,
+      userText: body.text,
+      assistantText: text,
+      assistantModel: chatModel,
+      assistantLatencyMs: llmLatencyMs,
+    })
+  } catch {
+    return jsonError(500, body.turnId, 'InternalError', 'Failed to persist conversation state')
+  }
+
+  return Response.json(
+    {
+      conversationId: body.conversationId,
+      turnId: body.turnId,
+      text,
+      personaId,
+      latencyMs: llmLatencyMs,
+    },
+    {
+      headers: {
+        'cache-control': 'no-store',
+      },
+    },
+  )
 }
