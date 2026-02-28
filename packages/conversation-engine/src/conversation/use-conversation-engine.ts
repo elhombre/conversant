@@ -284,6 +284,7 @@ export function useConversationEngine(options: UseConversationEngineOptions = {}
     captureStage,
     micStatus,
     audioContextState,
+    analyserNode: analyserRef.current,
     inputLevel,
     isMuted,
     interruptionCount,
