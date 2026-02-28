@@ -11,9 +11,29 @@ type AudioDataRefs = {
   freqDataRef: RefObject<Uint8Array>
 }
 
+export type AudioOscilloscopeColorPalette = {
+  pointLightPrimary: string
+  pointLightSecondary: string
+  coreFrontStart: [number, number, number]
+  coreFrontEnd: [number, number, number]
+  coreBackStart: [number, number, number]
+  coreBackEnd: [number, number, number]
+  backWireLiftColor: [number, number, number]
+  auraStart: [number, number, number]
+  auraEnd: [number, number, number]
+  lineStroke: [number, number, number]
+  lineShadow: [number, number, number]
+}
+
 export type AudioOscilloscopeVisualizerProps = {
   analyser: AnalyserNode | null
   isActive: boolean
+  palette?: AudioOscilloscopeColorPalette
+  renderProfile?: 'default' | 'light'
+  auraAdditiveBlending?: boolean
+  auraBaseOpacity?: number
+  auraAudioOpacity?: number
+  backWireLift?: number
   className?: string
   style?: CSSProperties
   distortion?: number
@@ -26,6 +46,7 @@ export type AudioOscilloscopeVisualizerProps = {
   backWireOpacity?: number
   haloStrength?: number
   lineAmplitude?: number
+  lineSensitivity?: number
   lineCount?: number
   linePoints?: number
   lineTemporalSmoothing?: number
@@ -46,7 +67,13 @@ const DEFAULTS = {
   wireframeOpacity: 0.5,
   backWireOpacity: 0.3,
   haloStrength: 1,
+  renderProfile: 'default' as const,
+  auraBaseOpacity: 0.24,
+  auraAudioOpacity: 0.28,
+  auraAdditiveBlending: true,
+  backWireLift: 0,
   lineAmplitude: 67,
+  lineSensitivity: 1.6,
   lineCount: 3,
   linePoints: 220,
   lineTemporalSmoothing: 0.18,
@@ -54,6 +81,20 @@ const DEFAULTS = {
   showIdleRings: true,
   dpr: [1, 2] as [number, number],
   cameraZ: 7.1,
+}
+
+const DEFAULT_COLOR_PALETTE: AudioOscilloscopeColorPalette = {
+  pointLightPrimary: '#7fffb9',
+  pointLightSecondary: '#3cf4a0',
+  coreFrontStart: [0.43, 1, 0.72],
+  coreFrontEnd: [0.75, 1, 0.88],
+  coreBackStart: [0.03, 0.07, 0.05],
+  coreBackEnd: [0.07, 0.14, 0.1],
+  backWireLiftColor: [0.72, 0.74, 0.78],
+  auraStart: [0.2, 0.95, 0.62],
+  auraEnd: [0.78, 1, 0.9],
+  lineStroke: [0.525, 1, 0.804],
+  lineShadow: [0.392, 1, 0.745],
 }
 
 const SIMPLEX_NOISE = `
@@ -133,6 +174,18 @@ float snoise(vec3 v) {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function toVec3Literal(color: [number, number, number]): string {
+  return `vec3(${color[0].toFixed(3)}, ${color[1].toFixed(3)}, ${color[2].toFixed(3)})`
+}
+
+function toRgbChannels(color: [number, number, number]): [number, number, number] {
+  return [
+    Math.round(clamp(color[0], 0, 1) * 255),
+    Math.round(clamp(color[1], 0, 1) * 255),
+    Math.round(clamp(color[2], 0, 1) * 255),
+  ]
 }
 
 function sampleSmoothedFrequency(data: Uint8Array, center: number): number {
@@ -247,6 +300,12 @@ type BlobProps = {
   wireframeOpacity: number
   backWireOpacity: number
   haloStrength: number
+  renderProfile: 'default' | 'light'
+  auraAdditiveBlending: boolean
+  auraBaseOpacity: number
+  auraAudioOpacity: number
+  backWireLift: number
+  palette: AudioOscilloscopeColorPalette
 }
 
 function BlobMesh({
@@ -262,6 +321,12 @@ function BlobMesh({
   wireframeOpacity,
   backWireOpacity,
   haloStrength,
+  renderProfile,
+  auraAdditiveBlending,
+  auraBaseOpacity,
+  auraAudioOpacity,
+  backWireLift,
+  palette,
 }: BlobProps) {
   const groupRef = useRef<THREE.Group>(null)
   const visualTimeRef = useRef(0)
@@ -270,6 +335,7 @@ function BlobMesh({
 
   const detail = clamp(Math.round(meshResolution), 0, 6)
   const haloSegments = clamp(Math.round(haloResolution), 16, 128)
+  const isLightProfile = renderProfile === 'light'
 
   const coreFrontMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -299,17 +365,30 @@ function BlobMesh({
           vNormal = normalize(normalMatrix * normal);
         }
       `,
-      fragmentShader: `
-        uniform float audioLevel;
-        varying vec3 vNormal;
+      fragmentShader: isLightProfile
+        ? `
+            uniform float audioLevel;
+            varying vec3 vNormal;
 
-        void main() {
-          float fresnel = pow(0.75 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.15);
-          vec3 baseColor = mix(vec3(0.43, 1.0, 0.72), vec3(0.75, 1.0, 0.88), audioLevel);
-          vec3 color = baseColor * fresnel * (0.86 + audioLevel * 2.0);
-          gl_FragColor = vec4(color, ${wireframeOpacity.toFixed(3)});
-        }
-      `,
+            void main() {
+              float fresnel = pow(max(0.0, 0.75 - dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.15);
+              vec3 baseColor = mix(${toVec3Literal(palette.coreFrontStart)}, ${toVec3Literal(palette.coreFrontEnd)}, audioLevel);
+              float intensity = 1.04 + fresnel * (0.24 + audioLevel * 0.38);
+              vec3 color = baseColor * intensity;
+              gl_FragColor = vec4(color, ${wireframeOpacity.toFixed(3)});
+            }
+          `
+        : `
+            uniform float audioLevel;
+            varying vec3 vNormal;
+
+            void main() {
+              float fresnel = pow(max(0.0, 0.75 - dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.15);
+              vec3 baseColor = mix(${toVec3Literal(palette.coreFrontStart)}, ${toVec3Literal(palette.coreFrontEnd)}, audioLevel);
+              vec3 color = baseColor * fresnel * (0.86 + audioLevel * 2.0);
+              gl_FragColor = vec4(color, ${wireframeOpacity.toFixed(3)});
+            }
+          `,
       wireframe: true,
       side: THREE.FrontSide,
       transparent: true,
@@ -319,7 +398,7 @@ function BlobMesh({
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
     })
-  }, [distortion, wireframeOpacity])
+  }, [distortion, isLightProfile, palette.coreFrontEnd, palette.coreFrontStart, wireframeOpacity])
 
   const coreBackMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -327,6 +406,7 @@ function BlobMesh({
         time: { value: 0 },
         audioLevel: { value: 0 },
         distortion: { value: distortion },
+        backWireLift: { value: backWireLift },
       },
       vertexShader: `
         uniform float time;
@@ -349,24 +429,40 @@ function BlobMesh({
           vNormal = normalize(normalMatrix * normal);
         }
       `,
-      fragmentShader: `
-        uniform float audioLevel;
-        varying vec3 vNormal;
+      fragmentShader: isLightProfile
+        ? `
+            uniform float audioLevel;
+            uniform float backWireLift;
+            varying vec3 vNormal;
 
-        void main() {
-          float fresnel = pow(0.75 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.15);
-          vec3 baseColor = mix(vec3(0.03, 0.07, 0.05), vec3(0.07, 0.14, 0.1), audioLevel);
-          vec3 color = baseColor * (0.65 + fresnel * 0.35);
-          gl_FragColor = vec4(color, ${backWireOpacity.toFixed(3)});
-        }
-      `,
+            void main() {
+              float fresnel = pow(max(0.0, 0.75 - dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.15);
+              vec3 baseColor = mix(${toVec3Literal(palette.coreBackStart)}, ${toVec3Literal(palette.coreBackEnd)}, audioLevel);
+              vec3 color = baseColor * (0.86 + fresnel * 0.24);
+              color = mix(color, ${toVec3Literal(palette.backWireLiftColor)}, clamp(backWireLift, 0.0, 1.0));
+              gl_FragColor = vec4(color, ${backWireOpacity.toFixed(3)});
+            }
+          `
+        : `
+            uniform float audioLevel;
+            uniform float backWireLift;
+            varying vec3 vNormal;
+
+            void main() {
+              float fresnel = pow(max(0.0, 0.75 - dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.15);
+              vec3 baseColor = mix(${toVec3Literal(palette.coreBackStart)}, ${toVec3Literal(palette.coreBackEnd)}, audioLevel);
+              vec3 color = baseColor * (0.65 + fresnel * 0.35);
+              color = mix(color, ${toVec3Literal(palette.backWireLiftColor)}, clamp(backWireLift, 0.0, 1.0));
+              gl_FragColor = vec4(color, ${backWireOpacity.toFixed(3)});
+            }
+          `,
       wireframe: true,
       side: THREE.BackSide,
       transparent: true,
       depthTest: true,
       depthWrite: false,
     })
-  }, [backWireOpacity, distortion])
+  }, [backWireLift, backWireOpacity, distortion, isLightProfile, palette.backWireLiftColor, palette.coreBackEnd, palette.coreBackStart])
 
   const auraMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -375,47 +471,104 @@ function BlobMesh({
         audioLevel: { value: 0 },
         distortion: { value: distortion },
         haloStrength: { value: haloStrength },
+        auraBaseOpacity: { value: auraBaseOpacity },
+        auraAudioOpacity: { value: auraAudioOpacity },
       },
-      vertexShader: `
-        uniform float time;
-        uniform float audioLevel;
-        uniform float distortion;
-        uniform float haloStrength;
+      vertexShader: isLightProfile
+        ? `
+            uniform float time;
+            uniform float audioLevel;
+            uniform float distortion;
+            uniform float haloStrength;
 
-        varying vec3 vNormal;
+            varying vec3 vNormal;
 
-        ${SIMPLEX_NOISE}
+            ${SIMPLEX_NOISE}
 
-        void main() {
-          float haloTime = time * 0.24;
-          float irregularA = snoise(position * 0.95 + vec3(haloTime));
-          float irregularB = snoise(normal * 1.7 - vec3(haloTime * 0.7));
-          float irregular = (irregularA * 0.08 + irregularB * 0.05) * distortion;
+            void main() {
+              float haloTime = time * 0.24;
+              float irregularA = snoise(position * 0.95 + vec3(haloTime));
+              float irregularB = snoise(normal * 1.7 - vec3(haloTime * 0.7));
+              float irregular = (irregularA * 0.045 + irregularB * 0.03) * distortion;
 
-          vec3 transformed = position;
-          transformed *= 1.1 + irregular + audioLevel * 0.19 * haloStrength;
+              vec3 transformed = position;
+              transformed *= 1.1 + irregular + audioLevel * 0.19 * haloStrength;
 
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
-          vNormal = normalize(normalMatrix * normal);
-        }
-      `,
-      fragmentShader: `
-        uniform float audioLevel;
-        uniform float haloStrength;
-        varying vec3 vNormal;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+              vNormal = normalize(normalMatrix * normal);
+            }
+          `
+        : `
+            uniform float time;
+            uniform float audioLevel;
+            uniform float distortion;
+            uniform float haloStrength;
 
-        void main() {
-          float edge = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.45);
-          vec3 color = mix(vec3(0.20, 0.95, 0.62), vec3(0.78, 1.0, 0.90), audioLevel);
-          gl_FragColor = vec4(color * edge, (0.24 + audioLevel * 0.28) * haloStrength);
-        }
-      `,
-      blending: THREE.AdditiveBlending,
+            varying vec3 vNormal;
+
+            ${SIMPLEX_NOISE}
+
+            void main() {
+              float haloTime = time * 0.24;
+              float irregularA = snoise(position * 0.95 + vec3(haloTime));
+              float irregularB = snoise(normal * 1.7 - vec3(haloTime * 0.7));
+              float irregular = (irregularA * 0.08 + irregularB * 0.05) * distortion;
+
+              vec3 transformed = position;
+              transformed *= 1.1 + irregular + audioLevel * 0.19 * haloStrength;
+
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+              vNormal = normalize(normalMatrix * normal);
+            }
+          `,
+      fragmentShader: isLightProfile
+        ? `
+            uniform float audioLevel;
+            uniform float haloStrength;
+            uniform float auraBaseOpacity;
+            uniform float auraAudioOpacity;
+            varying vec3 vNormal;
+
+            void main() {
+              float edge = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.2);
+              float rim = smoothstep(0.16, 0.94, edge);
+              vec3 shellColor = mix(${toVec3Literal(palette.auraStart)}, ${toVec3Literal(palette.auraEnd)}, rim);
+              vec3 audioColor = mix(${toVec3Literal(palette.auraStart)}, ${toVec3Literal(palette.auraEnd)}, clamp(audioLevel, 0.0, 1.0));
+              vec3 color = mix(shellColor, audioColor, 0.18);
+              float alpha = (auraBaseOpacity + audioLevel * auraAudioOpacity) * haloStrength;
+              alpha *= 0.74 + rim * 0.58;
+              alpha = clamp(alpha, 0.0, 0.92);
+              gl_FragColor = vec4(color, alpha);
+            }
+          `
+        : `
+            uniform float audioLevel;
+            uniform float haloStrength;
+            uniform float auraBaseOpacity;
+            uniform float auraAudioOpacity;
+            varying vec3 vNormal;
+
+            void main() {
+              float edge = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.45);
+              vec3 color = mix(${toVec3Literal(palette.auraStart)}, ${toVec3Literal(palette.auraEnd)}, audioLevel);
+              gl_FragColor = vec4(color * edge, (auraBaseOpacity + audioLevel * auraAudioOpacity) * haloStrength);
+            }
+          `,
+      blending: auraAdditiveBlending ? THREE.AdditiveBlending : THREE.NormalBlending,
       side: THREE.BackSide,
       transparent: true,
       depthWrite: false,
     })
-  }, [distortion, haloStrength])
+  }, [
+    auraAdditiveBlending,
+    auraAudioOpacity,
+    auraBaseOpacity,
+    distortion,
+    haloStrength,
+    isLightProfile,
+    palette.auraEnd,
+    palette.auraStart,
+  ])
 
   useEffect(() => {
     return () => {
@@ -502,9 +655,12 @@ type LinesProps = {
   lineCount: number
   linePoints: number
   lineAmplitude: number
+  lineSensitivity: number
   lineTemporalSmoothing: number
   lineSpatialSmoothingPasses: number
   showIdleRings: boolean
+  blendMode: 'screen' | 'normal'
+  palette: AudioOscilloscopeColorPalette
 }
 
 function ScreenLines({
@@ -513,9 +669,12 @@ function ScreenLines({
   lineCount,
   linePoints,
   lineAmplitude,
+  lineSensitivity,
   lineTemporalSmoothing,
   lineSpatialSmoothingPasses,
   showIdleRings,
+  blendMode,
+  palette,
 }: LinesProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const radiiHistoryRef = useRef<number[][]>([])
@@ -535,6 +694,12 @@ function ScreenLines({
     const safeLinePoints = clamp(Math.round(linePoints), 48, 512)
     const temporalLerp = clamp(lineTemporalSmoothing, 0.02, 0.8)
     const smoothingPasses = clamp(Math.round(lineSpatialSmoothingPasses), 0, 6)
+    const sensitivity = clamp(lineSensitivity, 0.5, 3)
+    const lowLevelDetectionFloor = 0.004 / sensitivity
+    const lowLevelBias = 0.016 * sensitivity
+    const lowLevelGain = 1.1 + sensitivity * 0.45
+    const [lineStrokeR, lineStrokeG, lineStrokeB] = toRgbChannels(palette.lineStroke)
+    const [lineShadowR, lineShadowG, lineShadowB] = toRgbChannels(palette.lineShadow)
 
     const resize = () => {
       const parent = canvas.parentElement
@@ -567,9 +732,9 @@ function ScreenLines({
         context.arc(centerX, centerY, ringRadius, 0, Math.PI * 2)
         context.closePath()
 
-        context.strokeStyle = `rgba(134, 255, 205, ${Math.max(0.1, 0.36 - ring * 0.08)})`
+        context.strokeStyle = `rgba(${lineStrokeR}, ${lineStrokeG}, ${lineStrokeB}, ${Math.max(0.1, 0.36 - ring * 0.08)})`
         context.lineWidth = Math.max(1.15, 2.8 - ring * 0.6)
-        context.shadowColor = 'rgba(100, 255, 190, 0.35)'
+        context.shadowColor = `rgba(${lineShadowR}, ${lineShadowG}, ${lineShadowB}, 0.35)`
         context.shadowBlur = 8 + ring * 2
         context.stroke()
       }
@@ -630,7 +795,11 @@ function ScreenLines({
             const raw = Math.floor((i / safeLinePoints) * dataLength + offset + ring * 17)
             const bin = ((raw % dataLength) + dataLength) % dataLength
             const local = sampleSmoothedFrequency(frequencyData, bin)
-            const blended = Math.min(1, local * 0.58 + globalEnergy * 0.42)
+            const blendedRaw = Math.min(1, local * 0.58 + globalEnergy * 0.42)
+            const blended =
+              blendedRaw <= lowLevelDetectionFloor
+                ? 0
+                : clamp((blendedRaw + lowLevelBias) * lowLevelGain, 0, 1)
             const target = ringRadius + blended * amplitude
             history[i] = history[i] + (target - history[i]) * temporalLerp
             radii[i] = history[i]
@@ -663,9 +832,9 @@ function ScreenLines({
           }
 
           context.closePath()
-          context.strokeStyle = `rgba(134, 255, 205, ${Math.max(0.08, strokeAlpha)})`
+          context.strokeStyle = `rgba(${lineStrokeR}, ${lineStrokeG}, ${lineStrokeB}, ${Math.max(0.08, strokeAlpha)})`
           context.lineWidth = Math.max(1.15, 2.8 - ring * 0.6)
-          context.shadowColor = 'rgba(100, 255, 190, 0.45)'
+          context.shadowColor = `rgba(${lineShadowR}, ${lineShadowG}, ${lineShadowB}, 0.45)`
           context.shadowBlur = 9 + ring * 3
           context.stroke()
         }
@@ -685,14 +854,22 @@ function ScreenLines({
     freqDataRef,
     isActive,
     lineAmplitude,
+    lineSensitivity,
     lineCount,
     linePoints,
     lineSpatialSmoothingPasses,
     lineTemporalSmoothing,
+    palette.lineShadow,
+    palette.lineStroke,
     showIdleRings,
   ])
 
-  return <canvas className="pointer-events-none absolute inset-0 z-10 mix-blend-screen" ref={canvasRef} />
+  return (
+    <canvas
+      className={cn('pointer-events-none absolute inset-0 z-10', blendMode === 'screen' ? 'mix-blend-screen' : 'mix-blend-normal')}
+      ref={canvasRef}
+    />
+  )
 }
 
 export default function AudioOscilloscopeVisualizer(props: AudioOscilloscopeVisualizerProps) {
@@ -710,7 +887,13 @@ export default function AudioOscilloscopeVisualizer(props: AudioOscilloscopeVisu
     wireframeOpacity = DEFAULTS.wireframeOpacity,
     backWireOpacity = DEFAULTS.backWireOpacity,
     haloStrength = DEFAULTS.haloStrength,
+    renderProfile = DEFAULTS.renderProfile,
+    auraBaseOpacity = DEFAULTS.auraBaseOpacity,
+    auraAudioOpacity = DEFAULTS.auraAudioOpacity,
+    auraAdditiveBlending = DEFAULTS.auraAdditiveBlending,
+    backWireLift = DEFAULTS.backWireLift,
     lineAmplitude = DEFAULTS.lineAmplitude,
+    lineSensitivity = DEFAULTS.lineSensitivity,
     lineCount = DEFAULTS.lineCount,
     linePoints = DEFAULTS.linePoints,
     lineTemporalSmoothing = DEFAULTS.lineTemporalSmoothing,
@@ -720,6 +903,7 @@ export default function AudioOscilloscopeVisualizer(props: AudioOscilloscopeVisu
     dpr = DEFAULTS.dpr,
     cameraZ = DEFAULTS.cameraZ,
   } = props
+  const palette = props.palette ?? DEFAULT_COLOR_PALETTE
 
   const { audioLevelRef, freqDataRef } = useAnalyserData(analyser, isActive, audioReactivity)
 
@@ -727,8 +911,8 @@ export default function AudioOscilloscopeVisualizer(props: AudioOscilloscopeVisu
     <div className={cn('relative h-full w-full', className)} style={style}>
       <Canvas camera={{ position: [0, 0, cameraZ], fov: 52 }} dpr={dpr}>
         <ambientLight intensity={0.28} />
-        <pointLight position={[4, 4, 5]} intensity={2.45} color="#7fffb9" />
-        <pointLight position={[-4, -2, 4]} intensity={1.7} color="#3cf4a0" />
+        <pointLight position={[4, 4, 5]} intensity={2.45} color={palette.pointLightPrimary} />
+        <pointLight position={[-4, -2, 4]} intensity={1.7} color={palette.pointLightSecondary} />
         <BlobMesh
           audioLevelRef={audioLevelRef}
           isActive={isActive}
@@ -742,6 +926,12 @@ export default function AudioOscilloscopeVisualizer(props: AudioOscilloscopeVisu
           wireframeOpacity={wireframeOpacity}
           backWireOpacity={backWireOpacity}
           haloStrength={haloStrength}
+          renderProfile={renderProfile}
+          auraAdditiveBlending={auraAdditiveBlending}
+          auraBaseOpacity={auraBaseOpacity}
+          auraAudioOpacity={auraAudioOpacity}
+          backWireLift={backWireLift}
+          palette={palette}
         />
       </Canvas>
 
@@ -751,9 +941,12 @@ export default function AudioOscilloscopeVisualizer(props: AudioOscilloscopeVisu
         lineCount={lineCount}
         linePoints={linePoints}
         lineAmplitude={lineAmplitude}
+        lineSensitivity={lineSensitivity}
         lineTemporalSmoothing={lineTemporalSmoothing}
         lineSpatialSmoothingPasses={lineSpatialSmoothingPasses}
         showIdleRings={showIdleRings}
+        blendMode={renderProfile === 'light' ? 'normal' : 'screen'}
+        palette={palette}
       />
     </div>
   )

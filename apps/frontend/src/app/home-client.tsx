@@ -14,7 +14,9 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import AudioOscilloscopeVisualizer from '@/components/audio/audio-oscilloscope-visualizer'
+import AudioOscilloscopeVisualizer, {
+  type AudioOscilloscopeColorPalette,
+} from '@/components/audio/audio-oscilloscope-visualizer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -72,6 +74,20 @@ const SECTIONS: SectionConfig[] = [
     icon: Settings,
   },
 ]
+
+const LIGHT_THEME_OSCILLOSCOPE_PALETTE: AudioOscilloscopeColorPalette = {
+  pointLightPrimary: '#2e6cff',
+  pointLightSecondary: '#184ec6',
+  coreFrontStart: [0.24, 0.44, 0.88],
+  coreFrontEnd: [0.36, 0.56, 0.95],
+  coreBackStart: [0.56, 0.77, 1.0],
+  coreBackEnd: [0.82, 0.92, 1.0],
+  backWireLiftColor: [0.88, 0.95, 1.0],
+  auraStart: [0.6, 0.79, 1.0],
+  auraEnd: [0.03, 0.17, 0.68],
+  lineStroke: [0.1, 0.26, 0.72],
+  lineShadow: [0.07, 0.18, 0.54],
+}
 
 function formatDuration(seconds: number): string {
   const safe = Math.max(0, seconds)
@@ -186,7 +202,7 @@ function resolveSectionLabel(sectionId: SectionId, locale: UiLocale): string {
 
 export function HomeClient() {
   const router = useRouter()
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme, resolvedTheme } = useTheme()
   const [activeSection, setActiveSection] = useState<SectionId>('conversation')
   const [locale, setLocale] = useState<UiLocale>('en')
   const [localeReady, setLocaleReady] = useState(false)
@@ -410,6 +426,17 @@ export function HomeClient() {
 
   const totalFeedMessages = feedMessages.length
   const inlineNotice = isNoSpeechNotice(lastNotice) ? null : lastNotice
+  const isLightTheme = themeReady && resolvedTheme === 'light'
+  const visualizerPalette = isLightTheme ? LIGHT_THEME_OSCILLOSCOPE_PALETTE : undefined
+  const visualizerWireframeOpacity = isLightTheme ? 0.95 : 0.52
+  const visualizerBackWireOpacity = isLightTheme ? 0.52 : 0.25
+  const visualizerBackWireLift = isLightTheme ? 1 : 0
+  const visualizerHaloStrength = isLightTheme ? 1.2 : 0.95
+  const visualizerAuraBaseOpacity = isLightTheme ? 0.4 : undefined
+  const visualizerAuraAudioOpacity = isLightTheme ? 0.34 : undefined
+  const visualizerAuraAdditiveBlending = isLightTheme ? false : true
+  const visualizerRenderProfile = isLightTheme ? 'light' : 'default'
+  const visualizerHaloResolution = isLightTheme ? 92 : 64
   const setThemeMode = useCallback(
     (mode: ThemeMode) => {
       setTheme(mode)
@@ -497,30 +524,44 @@ export function HomeClient() {
                 onClick={toggleMute}
                 type="button"
               >
-                <div className="absolute inset-0 bg-gradient-to-b from-background to-background via-background/50" />
+                <div
+                  className={cn(
+                    'absolute inset-0',
+                    isLightTheme
+                      ? 'bg-gradient-to-b from-transparent via-blue-50/10 to-blue-100/16'
+                      : 'bg-gradient-to-b from-background to-background via-background/50',
+                  )}
+                />
                 <div className="relative h-full w-full duration-150 group-hover:scale-[1.005] transition-transform">
                   <AudioOscilloscopeVisualizer
                     analyser={analyserNode}
                     audioReactivity={1}
-                    backWireOpacity={0.25}
+                    auraAudioOpacity={visualizerAuraAudioOpacity}
+                    auraBaseOpacity={visualizerAuraBaseOpacity}
+                    auraAdditiveBlending={visualizerAuraAdditiveBlending}
+                    backWireLift={visualizerBackWireLift}
                     cameraZ={7.1}
                     className="h-full w-full"
                     distortion={1}
                     dpr={[1, 1.6]}
                     freezeWhenInactive
-                    haloResolution={64}
-                    haloStrength={0.95}
+                    haloResolution={visualizerHaloResolution}
+                    haloStrength={visualizerHaloStrength}
                     idleRotationSpeed={0}
                     isActive={visualizerActive}
                     lineAmplitude={58}
+                    lineSensitivity={2}
                     lineCount={3}
                     linePoints={168}
                     lineSpatialSmoothingPasses={2}
                     lineTemporalSmoothing={0.16}
                     meshResolution={2}
+                    palette={visualizerPalette}
+                    renderProfile={visualizerRenderProfile}
                     rotationSpeed={0.12}
                     showIdleRings={false}
-                    wireframeOpacity={0.52}
+                    wireframeOpacity={visualizerWireframeOpacity}
+                    backWireOpacity={visualizerBackWireOpacity}
                   />
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="backdrop-blur bg-card/80 shadow-xl px-4 py-2 border rounded-full">
