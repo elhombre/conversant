@@ -437,6 +437,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@conversant/backend-core@workspace:*, @conversant/backend-core@workspace:packages/backend-core":
+  version: 0.0.0-use.local
+  resolution: "@conversant/backend-core@workspace:packages/backend-core"
+  dependencies:
+    "@biomejs/biome": "npm:2.4.4"
+    "@types/node": "npm:^20"
+    openai: "npm:^6.25.0"
+    typescript: "npm:^5"
+  languageName: unknown
+  linkType: soft
+
 "@conversant/conversation-engine@workspace:*, @conversant/conversation-engine@workspace:packages/conversation-engine":
   version: 0.0.0-use.local
   resolution: "@conversant/conversation-engine@workspace:packages/conversation-engine"
@@ -3511,6 +3522,7 @@ __metadata:
   resolution: "frontend@workspace:apps/frontend"
   dependencies:
     "@biomejs/biome": "npm:2.4.4"
+    "@conversant/backend-core": "workspace:*"
     "@conversant/conversation-engine": "workspace:*"
     "@tailwindcss/postcss": "npm:^4"
     "@types/node": "npm:^20"
@@ -3520,7 +3532,6 @@ __metadata:
     clsx: "npm:^2.1.1"
     lucide-react: "npm:^0.575.0"
     next: "npm:16.1.6"
-    openai: "npm:^6.25.0"
     radix-ui: "npm:^1.4.3"
     react: "npm:19.2.3"
     react-dom: "npm:19.2.3"

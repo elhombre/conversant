@@ -1,0 +1,178 @@
+import { createRequestSignal, getAbortKind } from './shared/abort'
+import { jsonError } from './shared/http'
+import { createOpenAIClient, getOpenAIProviderConfig } from './shared/openai-client'
+import {
+  getProviderErrorMessage,
+  getProviderErrorStatus,
+  isLikelyProviderNetworkError,
+  isProviderUnavailableStatus,
+  isTimeoutStatus,
+} from './shared/openai-error'
+import { asRecord, readNonEmptyString } from './shared/parsing'
+
+const CHAT_TIMEOUT_MS = 15_000
+const CHAT_MAX_TOKENS = 220
+
+type PersonaId = 'Concise' | 'Conversational' | 'Interviewer'
+
+type ChatBody = {
+  turnId: string
+  text: string
+  personaId?: PersonaId
+}
+
+const PERSONA_SYSTEM_PROMPTS: Record<PersonaId, string> = {
+  Concise:
+    'You are a concise voice assistant. Respond with one short, clear answer in 1-2 sentences unless user asks for detail.',
+  Conversational:
+    'You are a conversational voice assistant. Be natural, warm, and practical. Keep responses brief and easy to say aloud.',
+  Interviewer:
+    'You are an interviewer-style assistant. Be structured, ask clarifying follow-up questions when useful, and keep responses focused.',
+}
+
+function isPersonaId(value: string): value is PersonaId {
+  return value in PERSONA_SYSTEM_PROMPTS
+}
+
+function parseBody(rawBody: unknown): ChatBody | null {
+  const body = asRecord(rawBody)
+  if (!body) {
+    return null
+  }
+
+  const turnId = readNonEmptyString(body.turnId)
+  const text = readNonEmptyString(body.text)
+  if (!turnId || !text) {
+    return null
+  }
+
+  const personaRaw = readNonEmptyString(body.personaId)
+  const personaId = personaRaw && isPersonaId(personaRaw) ? personaRaw : undefined
+
+  return {
+    turnId,
+    text,
+    personaId,
+  }
+}
+
+function mapProviderError(status: number | null, message: string) {
+  if (isLikelyProviderNetworkError(status, message)) {
+    return {
+      status: 500,
+      code: 'ProviderUnavailable' as const,
+      message: 'Cannot reach LLM provider. Check OPENAI_BASE_URL and model availability.',
+    }
+  }
+
+  if (status === 400) {
+    return {
+      status: 400,
+      code: 'BadRequest' as const,
+      message,
+    }
+  }
+
+  if (isTimeoutStatus(status)) {
+    return {
+      status: 504,
+      code: 'Timeout' as const,
+      message: 'LLM request timed out',
+    }
+  }
+
+  if (isProviderUnavailableStatus(status)) {
+    return {
+      status: 500,
+      code: 'ProviderUnavailable' as const,
+      message,
+    }
+  }
+
+  return {
+    status: 500,
+    code: 'InternalError' as const,
+    message,
+  }
+}
+
+export async function handleChatPost(request: Request) {
+  const providerConfig = getOpenAIProviderConfig()
+  if (!providerConfig) {
+    return jsonError(500, null, 'ProviderUnavailable', 'OPENAI_API_KEY is not configured')
+  }
+
+  let rawBody: unknown
+  try {
+    rawBody = await request.json()
+  } catch {
+    return jsonError(400, null, 'BadRequest', 'Invalid JSON payload')
+  }
+
+  const body = parseBody(rawBody)
+  if (!body) {
+    return jsonError(400, null, 'BadRequest', 'Invalid chat payload')
+  }
+
+  const signal = createRequestSignal(request.signal, CHAT_TIMEOUT_MS)
+  const chatModel = process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o-mini'
+  const personaId: PersonaId = body.personaId ?? 'Conversational'
+  const systemPrompt = PERSONA_SYSTEM_PROMPTS[personaId]
+
+  const client = createOpenAIClient(providerConfig)
+  const startedAt = performance.now()
+
+  try {
+    const completion = await client.chat.completions.create(
+      {
+        model: chatModel,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
+            role: 'user',
+            content: body.text,
+          },
+        ],
+        max_tokens: CHAT_MAX_TOKENS,
+      },
+      { signal },
+    )
+
+    const text = completion.choices[0]?.message?.content?.trim() ?? ''
+    if (!text) {
+      return jsonError(500, body.turnId, 'InternalError', 'LLM returned empty response')
+    }
+
+    return Response.json(
+      {
+        turnId: body.turnId,
+        text,
+        personaId,
+        latencyMs: Math.round(performance.now() - startedAt),
+      },
+      {
+        headers: {
+          'cache-control': 'no-store',
+        },
+      },
+    )
+  } catch (error) {
+    const abortKind = getAbortKind(signal, request.signal)
+    if (abortKind === 'cancelled') {
+      return jsonError(499, body.turnId, 'Cancelled', 'Chat request was cancelled')
+    }
+
+    if (abortKind === 'timeout') {
+      return jsonError(504, body.turnId, 'Timeout', 'Chat request timed out')
+    }
+
+    const status = getProviderErrorStatus(error)
+    const message = getProviderErrorMessage(error, 'Unknown LLM provider error')
+    const mapped = mapProviderError(status, message)
+
+    return jsonError(mapped.status, body.turnId, mapped.code, mapped.message)
+  }
+}
