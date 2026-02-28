@@ -1,4 +1,4 @@
-import type { VadEndReason, VadPreset } from '@/lib/vad/types'
+import type { VadEndReason, VadPreset } from '../vad/types'
 
 export type ConversationState = 'listening' | 'user_speaking' | 'processing' | 'assistant_speaking' | 'error'
 export type MicStatus = 'idle' | 'requesting' | 'ready' | 'denied' | 'error'

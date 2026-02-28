@@ -1,4 +1,4 @@
-import type { VadConfig, VadEvent } from '@/lib/vad/types'
+import type { VadConfig, VadEvent } from './types'
 
 type EnergyVadState = {
   speaking: boolean

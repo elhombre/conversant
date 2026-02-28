@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-import type { BadgeVariant, CaptureStage, ConversationState, MicStatus } from '@/lib/conversation/engine-types'
+import type { BadgeVariant, CaptureStage, ConversationState, MicStatus } from './engine-types'
 
 type UseConversationVariantsParams = {
   state: ConversationState

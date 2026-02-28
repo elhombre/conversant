@@ -1,4 +1,4 @@
-import type { VadConfig, VadPreset } from '@/lib/vad/types'
+import type { VadConfig, VadPreset } from './types'
 
 export const VAD_PRESETS: Record<VadPreset, VadConfig> = {
   Normal: {

@@ -437,6 +437,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@conversant/conversation-engine@workspace:*, @conversant/conversation-engine@workspace:packages/conversation-engine":
+  version: 0.0.0-use.local
+  resolution: "@conversant/conversation-engine@workspace:packages/conversation-engine"
+  dependencies:
+    "@biomejs/biome": "npm:2.4.4"
+    "@types/react": "npm:^19"
+    typescript: "npm:^5"
+  peerDependencies:
+    react: ^19.0.0
+    react-dom: ^19.0.0
+  languageName: unknown
+  linkType: soft
+
 "@dotenvx/dotenvx@npm:^1.48.4":
   version: 1.52.0
   resolution: "@dotenvx/dotenvx@npm:1.52.0"
@@ -3498,6 +3511,7 @@ __metadata:
   resolution: "frontend@workspace:apps/frontend"
   dependencies:
     "@biomejs/biome": "npm:2.4.4"
+    "@conversant/conversation-engine": "workspace:*"
     "@tailwindcss/postcss": "npm:^4"
     "@types/node": "npm:^20"
     "@types/react": "npm:^19"

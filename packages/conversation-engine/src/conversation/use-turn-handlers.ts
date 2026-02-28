@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
 
-import type { PendingUtteranceMeta } from '@/lib/conversation/engine-types'
-import { playTtsBlobForTurn } from '@/lib/conversation/tts-playback'
-import { requestChatTurn, requestSttTurn, requestTtsTurn } from '@/lib/conversation/turn-api'
-import { isTurnStale, settleAbortedTurn } from '@/lib/conversation/turn-guards'
+import type { PendingUtteranceMeta } from './engine-types'
+import { playTtsBlobForTurn } from './tts-playback'
+import { requestChatTurn, requestSttTurn, requestTtsTurn } from './turn-api'
+import { isTurnStale, settleAbortedTurn } from './turn-guards'
 import {
   CHAT_REQUEST_TIMEOUT_MS,
   getChatErrorMessage,
@@ -11,8 +11,8 @@ import {
   getTtsErrorMessage,
   STT_REQUEST_TIMEOUT_MS,
   TTS_REQUEST_TIMEOUT_MS,
-} from '@/lib/conversation/turn-pipeline'
-import type { TurnRuntime } from '@/lib/conversation/turn-runtime'
+} from './turn-pipeline'
+import type { TurnRuntime } from './turn-runtime'
 
 function hasTextPayload(
   payload: unknown,

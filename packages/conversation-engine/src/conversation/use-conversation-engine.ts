@@ -1,13 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo } from 'react'
-import type { TurnRuntime } from '@/lib/conversation/turn-runtime'
-import { useCaptureHandlers } from '@/lib/conversation/use-capture-handlers'
-import { useConversationStore } from '@/lib/conversation/use-conversation-store'
-import { useConversationVariants } from '@/lib/conversation/use-conversation-variants'
-import { useTurnHandlers } from '@/lib/conversation/use-turn-handlers'
-import { VAD_PRESETS } from '@/lib/vad/presets'
-import type { VadConfig } from '@/lib/vad/types'
+import { VAD_PRESETS } from '../vad/presets'
+import type { VadConfig } from '../vad/types'
+import type { TurnRuntime } from './turn-runtime'
+import { useCaptureHandlers } from './use-capture-handlers'
+import { useConversationStore } from './use-conversation-store'
+import { useConversationVariants } from './use-conversation-variants'
+import { useTurnHandlers } from './use-turn-handlers'
 
 export function useConversationEngine() {
   const {

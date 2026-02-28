@@ -8,7 +8,7 @@ import type {
   SttLanguageCode,
   SttLanguageMode,
   VoiceId,
-} from '@/lib/conversation/engine-types'
+} from './engine-types'
 
 export type TurnRuntime = {
   activeTurnIdRef: RefObject<string | null>

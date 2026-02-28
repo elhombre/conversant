@@ -1,11 +1,16 @@
 'use client'
 
+import {
+  PERSONA_ORDER,
+  STT_LANGUAGE_LABELS,
+  STT_LANGUAGE_ORDER,
+  useConversationEngine,
+  VAD_PRESET_ORDER,
+  VOICE_ORDER,
+} from '@conversant/conversation-engine'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PERSONA_ORDER, STT_LANGUAGE_LABELS, STT_LANGUAGE_ORDER, VOICE_ORDER } from '@/lib/conversation/engine-types'
-import { useConversationEngine } from '@/lib/conversation/use-conversation-engine'
-import { VAD_PRESET_ORDER } from '@/lib/vad/presets'
 
 export default function Home() {
   const {

@@ -1,17 +1,11 @@
-import type {
-  PendingUtteranceMeta,
-  PersonaId,
-  SttLanguageCode,
-  SttLanguageMode,
-  VoiceId,
-} from '@/lib/conversation/engine-types'
+import type { PendingUtteranceMeta, PersonaId, SttLanguageCode, SttLanguageMode, VoiceId } from './engine-types'
 import type {
   ChatErrorPayload,
   ChatSuccessPayload,
   SttErrorPayload,
   SttSuccessPayload,
   TtsErrorPayload,
-} from '@/lib/conversation/turn-pipeline'
+} from './turn-pipeline'
 
 type ApiSuccess<TPayload> = {
   ok: true

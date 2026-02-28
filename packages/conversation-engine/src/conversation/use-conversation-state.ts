@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-
+import type { VadPreset } from '../vad/types'
 import type {
   AudioCtxState,
   CaptureStage,
@@ -10,8 +10,7 @@ import type {
   SttLanguageCode,
   SttLanguageMode,
   VoiceId,
-} from '@/lib/conversation/engine-types'
-import type { VadPreset } from '@/lib/vad/types'
+} from './engine-types'
 
 export function useConversationState() {
   const [state, setState] = useState<ConversationState>('listening')

@@ -1,4 +1,4 @@
-import type { PersonaId } from '@/lib/conversation/engine-types'
+import type { PersonaId } from './engine-types'
 
 export const TOTAL_TURN_SOFT_TIMEOUT_MS = 30_000
 export const STT_REQUEST_TIMEOUT_MS = 12_000

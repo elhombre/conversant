@@ -1,7 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useRef } from 'react'
-
-import { pickRecorderMimeType } from '@/lib/conversation/audio-io'
+import { EnergyVad } from '../vad/energy-vad'
+import { VAD_PRESETS } from '../vad/presets'
+import type { VadPreset } from '../vad/types'
+import { pickRecorderMimeType } from './audio-io'
 import type {
   AudioCtxState,
   CaptureStage,
@@ -13,11 +15,8 @@ import type {
   SttLanguageCode,
   SttLanguageMode,
   VoiceId,
-} from '@/lib/conversation/engine-types'
-import { TOTAL_TURN_SOFT_TIMEOUT_MS } from '@/lib/conversation/turn-pipeline'
-import { EnergyVad } from '@/lib/vad/energy-vad'
-import { VAD_PRESETS } from '@/lib/vad/presets'
-import type { VadPreset } from '@/lib/vad/types'
+} from './engine-types'
+import { TOTAL_TURN_SOFT_TIMEOUT_MS } from './turn-pipeline'
 
 type CaptureCallbacks = {
   handleRecorderStop: () => void

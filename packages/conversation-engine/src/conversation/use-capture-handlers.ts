@@ -1,6 +1,8 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { useCallback } from 'react'
-
+import type { EnergyVad } from '../vad/energy-vad'
+import { VAD_PRESETS } from '../vad/presets'
+import type { VadEndReason, VadPreset } from '../vad/types'
 import {
   BARGE_IN_ECHO_SUPPRESS_DB,
   BARGE_IN_HOLD_MS,
@@ -10,7 +12,7 @@ import {
   createTurnId,
   MAX_TENTATIVE_CAPTURE_MS,
   PRE_TRIGGER_DB_MARGIN,
-} from '@/lib/conversation/audio-io'
+} from './audio-io'
 import type {
   AudioCtxState,
   CaptureStage,
@@ -18,10 +20,7 @@ import type {
   LastUtterance,
   MicStatus,
   PendingUtteranceMeta,
-} from '@/lib/conversation/engine-types'
-import type { EnergyVad } from '@/lib/vad/energy-vad'
-import { VAD_PRESETS } from '@/lib/vad/presets'
-import type { VadEndReason, VadPreset } from '@/lib/vad/types'
+} from './engine-types'
 
 type UseCaptureHandlersParams = {
   mediaRecorderRef: RefObject<MediaRecorder | null>

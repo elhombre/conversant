@@ -1,6 +1,6 @@
-import type { ConversationState } from '@/lib/conversation/engine-types'
-import { isTurnStale } from '@/lib/conversation/turn-guards'
-import type { TurnRuntime } from '@/lib/conversation/turn-runtime'
+import type { ConversationState } from './engine-types'
+import { isTurnStale } from './turn-guards'
+import type { TurnRuntime } from './turn-runtime'
 
 type PlaybackParams = {
   runtime: TurnRuntime

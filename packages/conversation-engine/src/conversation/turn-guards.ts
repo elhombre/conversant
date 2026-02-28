@@ -1,4 +1,4 @@
-import type { TurnRuntime } from '@/lib/conversation/turn-runtime'
+import type { TurnRuntime } from './turn-runtime'
 
 type TurnIdentity = Pick<TurnRuntime, 'activeTurnIdRef' | 'sessionTokenRef'>
 

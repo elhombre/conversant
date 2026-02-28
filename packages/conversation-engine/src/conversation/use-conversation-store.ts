@@ -1,9 +1,8 @@
 import { useCallback, useEffect } from 'react'
-
-import { useConversationRuntime } from '@/lib/conversation/use-conversation-runtime'
-import { useConversationState } from '@/lib/conversation/use-conversation-state'
-import { VAD_PRESETS } from '@/lib/vad/presets'
-import type { VadPreset } from '@/lib/vad/types'
+import { VAD_PRESETS } from '../vad/presets'
+import type { VadPreset } from '../vad/types'
+import { useConversationRuntime } from './use-conversation-runtime'
+import { useConversationState } from './use-conversation-state'
 
 export function useConversationStore() {
   const conversationState = useConversationState()
