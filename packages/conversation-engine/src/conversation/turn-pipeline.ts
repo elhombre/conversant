@@ -46,6 +46,29 @@ export function getSttErrorMessage(status: number, payload: SttErrorPayload | nu
   return defaultMessages.InternalError
 }
 
+export function isNoSpeechDetectedStt(status: number, payload: SttErrorPayload | null) {
+  const code = payload?.error?.code
+  if (code === 'NoSpeechDetected') {
+    return true
+  }
+
+  if (status !== 422) {
+    return false
+  }
+
+  const message = payload?.error?.message
+  if (typeof message !== 'string' || message.length === 0) {
+    return true
+  }
+
+  const normalizedMessage = message.toLowerCase()
+  return (
+    normalizedMessage.includes('no speech') ||
+    normalizedMessage.includes('empty transcript') ||
+    normalizedMessage.includes('did not detect')
+  )
+}
+
 export function getChatErrorMessage(status: number, payload: ChatErrorPayload | null) {
   const defaultMessages: Record<ChatErrorCode, string> = {
     BadRequest: 'Invalid chat payload.',

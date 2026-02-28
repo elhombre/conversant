@@ -16,6 +16,7 @@ export function useConversationStore() {
     setIsMuted: conversationState.setIsMuted,
     setInterruptionCount: conversationState.setInterruptionCount,
     setLastError: conversationState.setLastError,
+    setLastNotice: conversationState.setLastNotice,
     setLastUtterance: conversationState.setLastUtterance,
     setLastTranscript: conversationState.setLastTranscript,
     setLastAssistantText: conversationState.setLastAssistantText,

@@ -23,6 +23,7 @@ export function useConversationState() {
   const [isMuted, setIsMuted] = useState(false)
   const [interruptionCount, setInterruptionCount] = useState(0)
   const [lastError, setLastError] = useState<string | null>(null)
+  const [lastNotice, setLastNotice] = useState<string | null>(null)
   const [activePreset, setActivePreset] = useState<VadPreset>('Normal')
   const [activePersona, setActivePersona] = useState<PersonaId>('Conversational')
   const [activeVoice, setActiveVoice] = useState<VoiceId>('alloy')
@@ -74,6 +75,8 @@ export function useConversationState() {
     setInterruptionCount,
     lastError,
     setLastError,
+    lastNotice,
+    setLastNotice,
     activePreset,
     setActivePreset,
     activePersona,

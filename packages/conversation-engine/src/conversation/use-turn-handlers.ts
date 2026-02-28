@@ -9,6 +9,7 @@ import {
   getChatErrorMessage,
   getSttErrorMessage,
   getTtsErrorMessage,
+  isNoSpeechDetectedStt,
   STT_REQUEST_TIMEOUT_MS,
   TTS_REQUEST_TIMEOUT_MS,
 } from './turn-pipeline'
@@ -208,6 +209,7 @@ export function useTurnHandlers(runtime: TurnRuntime) {
       runtime.setSttLatencyMs(null)
       runtime.setLlmLatencyMs(null)
       runtime.setTtsLatencyMs(null)
+      runtime.setLastNotice(null)
       runtime.setState('processing')
       runtime.setCaptureStage('finalizing')
 
@@ -226,7 +228,14 @@ export function useTurnHandlers(runtime: TurnRuntime) {
         }
 
         if (!result.ok) {
-          runtime.setLastError(getSttErrorMessage(result.status, result.errorPayload))
+          const message = getSttErrorMessage(result.status, result.errorPayload)
+          if (isNoSpeechDetectedStt(result.status, result.errorPayload)) {
+            runtime.setLastNotice(message)
+            runtime.setLastError(null)
+          } else {
+            runtime.setLastNotice(null)
+            runtime.setLastError(message)
+          }
           runtime.setSttLatencyMs(result.elapsedMs)
           runtime.setCaptureStage('idle')
           runtime.setState(result.status >= 500 ? 'error' : 'listening')
@@ -235,6 +244,7 @@ export function useTurnHandlers(runtime: TurnRuntime) {
         }
 
         if (!hasTextPayload(result.payload)) {
+          runtime.setLastNotice(null)
           runtime.setLastError('STT response is invalid.')
           runtime.setState('error')
           runtime.setCaptureStage('idle')
@@ -248,6 +258,7 @@ export function useTurnHandlers(runtime: TurnRuntime) {
             ? result.payload.detectedLanguage
             : null,
         )
+        runtime.setLastNotice(null)
         runtime.setLastError(null)
         runtime.setSttLatencyMs(
           typeof result.payload.latencyMs === 'number' ? result.payload.latencyMs : result.elapsedMs,
@@ -264,6 +275,7 @@ export function useTurnHandlers(runtime: TurnRuntime) {
           return
         }
 
+        runtime.setLastNotice(null)
         runtime.setLastError('Network error during STT request.')
         runtime.setState('error')
         runtime.setCaptureStage('idle')

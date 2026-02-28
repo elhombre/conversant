@@ -21,6 +21,7 @@ export default function Home() {
     isMuted,
     interruptionCount,
     lastError,
+    lastNotice,
     activePreset,
     activePersona,
     activeVoice,
@@ -282,6 +283,10 @@ export default function Home() {
               <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-destructive">
                 {lastError}
               </div>
+            ) : null}
+
+            {lastNotice ? (
+              <div className="rounded border border-border/70 bg-muted/40 p-3 text-muted-foreground">{lastNotice}</div>
             ) : null}
           </CardContent>
         </Card>

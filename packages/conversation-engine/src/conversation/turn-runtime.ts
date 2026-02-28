@@ -36,6 +36,7 @@ export type TurnRuntime = {
   setState: Dispatch<SetStateAction<ConversationState>>
   setCaptureStage: Dispatch<SetStateAction<CaptureStage>>
   setLastError: Dispatch<SetStateAction<string | null>>
+  setLastNotice: Dispatch<SetStateAction<string | null>>
   setLastTranscript: Dispatch<SetStateAction<string>>
   setLastAssistantText: Dispatch<SetStateAction<string>>
   setLastTurnId: Dispatch<SetStateAction<string>>

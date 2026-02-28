@@ -33,6 +33,7 @@ type UseConversationRuntimeParams = {
   setIsMuted: Dispatch<SetStateAction<boolean>>
   setInterruptionCount: Dispatch<SetStateAction<number>>
   setLastError: Dispatch<SetStateAction<string | null>>
+  setLastNotice: Dispatch<SetStateAction<string | null>>
   setLastUtterance: Dispatch<SetStateAction<LastUtterance | null>>
   setLastTranscript: Dispatch<SetStateAction<string>>
   setLastAssistantText: Dispatch<SetStateAction<string>>
@@ -53,6 +54,7 @@ export function useConversationRuntime({
   setIsMuted,
   setInterruptionCount,
   setLastError,
+  setLastNotice,
   setLastUtterance,
   setLastTranscript,
   setLastAssistantText,
@@ -276,6 +278,7 @@ export function useConversationRuntime({
       micRequestInFlightRef.current = true
       setMicStatus('requesting')
       setLastError(null)
+      setLastNotice(null)
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -353,7 +356,7 @@ export function useConversationRuntime({
         micRequestInFlightRef.current = false
       }
     },
-    [cleanupAudio, setAudioContextState, setCaptureStage, setLastError, setMicStatus, setState],
+    [cleanupAudio, setAudioContextState, setCaptureStage, setLastError, setLastNotice, setMicStatus, setState],
   )
 
   const resetSessionWithInitializer = useCallback(
@@ -379,6 +382,7 @@ export function useConversationRuntime({
       setInputLevel(0)
       setCaptureStage('idle')
       setLastError(null)
+      setLastNotice(null)
       setLastTranscript('')
       setLastAssistantText('')
       setLastTurnId('')
@@ -406,6 +410,7 @@ export function useConversationRuntime({
       setLastAssistantText,
       setLastDetectedLanguage,
       setLastError,
+      setLastNotice,
       setLastTranscript,
       setLastTurnId,
       setLlmLatencyMs,
