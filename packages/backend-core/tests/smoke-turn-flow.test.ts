@@ -1,14 +1,24 @@
+import { readOpenAIProviderEnv } from '@conversant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleChatPost } from '../src/chat'
-import { createOpenAIClient, getOpenAIProviderConfig } from '../src/shared/openai-client'
+import { createOpenAIClient } from '../src/shared/openai-client'
 import { handleSttPost } from '../src/stt'
 import { handleTtsPost } from '../src/tts'
 import { asRecord, createAudioFile, createJsonRequest, createSttRequest, readError, readJson } from './test-utils'
 
 vi.mock('../src/shared/openai-client', () => ({
   createOpenAIClient: vi.fn(),
-  getOpenAIProviderConfig: vi.fn(),
+}))
+
+vi.mock('@conversant/config', () => ({
+  readOpenAIProviderEnv: vi.fn(),
+  readOpenAIModelEnv: vi.fn(() => ({
+    chatModel: 'gpt-4o-mini',
+    sttModel: 'gpt-4o-mini-transcribe',
+    sttLanguageDetectModel: 'whisper-1',
+    ttsModel: 'tts-1',
+  })),
 }))
 
 type OpenAIClient = ReturnType<typeof createOpenAIClient>
@@ -99,7 +109,7 @@ async function runSmokeTurn(turnId: string): Promise<SmokeResult> {
 describe('smoke turn flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getOpenAIProviderConfig).mockReturnValue({
+    vi.mocked(readOpenAIProviderEnv).mockReturnValue({
       apiKey: 'test-key',
       baseURL: 'http://provider.local/v1',
     })

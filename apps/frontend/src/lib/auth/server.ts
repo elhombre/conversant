@@ -1,5 +1,6 @@
 import type { InviteConsumeFailureReason, InviteConsumeResult } from '@conversant/backend-data'
 import { consumeInviteToken, resolveSessionUser, revokeSessionByToken } from '@conversant/backend-data'
+import { isProductionEnv } from '@conversant/config'
 import type { NextResponse } from 'next/server'
 import { SESSION_COOKIE_NAME } from './constants'
 
@@ -52,7 +53,7 @@ export function applySessionCookie(response: NextResponse, sessionToken: string,
     name: SESSION_COOKIE_NAME,
     value: sessionToken,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProductionEnv(),
     sameSite: 'lax',
     path: '/',
     expires: expiresAt,
@@ -64,7 +65,7 @@ export function clearSessionCookie(response: NextResponse) {
     name: SESSION_COOKIE_NAME,
     value: '',
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProductionEnv(),
     sameSite: 'lax',
     path: '/',
     maxAge: 0,

@@ -1,8 +1,9 @@
 import { type TtsRequestBody, VOICE_IDS, type VoiceId } from '@conversant/api-contracts'
+import { readOpenAIModelEnv, readOpenAIProviderEnv } from '@conversant/config'
 
 import { createRequestSignal, getAbortKind } from './shared/abort'
 import { jsonError } from './shared/http'
-import { createOpenAIClient, getOpenAIProviderConfig } from './shared/openai-client'
+import { createOpenAIClient } from './shared/openai-client'
 import {
   getProviderErrorMessage,
   getProviderErrorStatus,
@@ -86,7 +87,7 @@ function mapProviderError(status: number | null, message: string) {
 }
 
 export async function handleTtsPost(request: Request) {
-  const providerConfig = getOpenAIProviderConfig()
+  const providerConfig = readOpenAIProviderEnv()
   if (!providerConfig) {
     return jsonError(500, null, 'ProviderUnavailable', 'OPENAI_API_KEY is not configured')
   }
@@ -104,7 +105,8 @@ export async function handleTtsPost(request: Request) {
   }
 
   const signal = createRequestSignal(request.signal, TTS_TIMEOUT_MS)
-  const ttsModel = process.env.OPENAI_TTS_MODEL ?? 'tts-1'
+  const modelConfig = readOpenAIModelEnv()
+  const ttsModel = modelConfig.ttsModel
   const client = createOpenAIClient(providerConfig)
   const startedAt = performance.now()
 

@@ -19,6 +19,7 @@
     "invite:generate": "tsx scripts/generate-invite.ts"
   },
   "dependencies": {
+    "@conversant/config": "workspace:*",
     "@prisma/client": "6.19.2"
   },
   "devDependencies": {

@@ -1,8 +1,9 @@
 import { STT_LANGUAGE_CODES, type SttLanguageCode, type SttMeta } from '@conversant/api-contracts'
+import { readOpenAIModelEnv, readOpenAIProviderEnv } from '@conversant/config'
 
 import { createRequestSignal, getAbortKind } from './shared/abort'
 import { jsonError } from './shared/http'
-import { createOpenAIClient, getOpenAIProviderConfig } from './shared/openai-client'
+import { createOpenAIClient } from './shared/openai-client'
 import {
   getProviderErrorMessage,
   getProviderErrorStatus,
@@ -164,7 +165,7 @@ function mapProviderError(status: number | null, message: string) {
 }
 
 export async function handleSttPost(request: Request) {
-  const providerConfig = getOpenAIProviderConfig()
+  const providerConfig = readOpenAIProviderEnv()
   if (!providerConfig) {
     return jsonError(500, null, 'ProviderUnavailable', 'OPENAI_API_KEY is not configured')
   }
@@ -193,8 +194,9 @@ export async function handleSttPost(request: Request) {
   }
 
   const signal = createRequestSignal(request.signal, STT_TIMEOUT_MS)
-  const sttModel = process.env.OPENAI_STT_MODEL ?? 'gpt-4o-mini-transcribe'
-  const sttLanguageDetectModel = process.env.OPENAI_STT_LANGUAGE_DETECT_MODEL ?? 'whisper-1'
+  const modelConfig = readOpenAIModelEnv()
+  const sttModel = modelConfig.sttModel
+  const sttLanguageDetectModel = modelConfig.sttLanguageDetectModel
   const client = createOpenAIClient(providerConfig)
   const startedAt = performance.now()
 

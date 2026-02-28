@@ -452,6 +452,7 @@ __metadata:
   dependencies:
     "@biomejs/biome": "npm:2.4.4"
     "@conversant/api-contracts": "workspace:*"
+    "@conversant/config": "workspace:*"
     "@types/node": "npm:^20"
     openai: "npm:^6.25.0"
     typescript: "npm:^5"
@@ -464,10 +465,21 @@ __metadata:
   resolution: "@conversant/backend-data@workspace:packages/backend-data"
   dependencies:
     "@biomejs/biome": "npm:2.4.4"
+    "@conversant/config": "workspace:*"
     "@prisma/client": "npm:6.19.2"
     "@types/node": "npm:^20"
     prisma: "npm:6.19.2"
     tsx: "npm:^4.20.6"
+    typescript: "npm:^5"
+  languageName: unknown
+  linkType: soft
+
+"@conversant/config@workspace:*, @conversant/config@workspace:packages/config":
+  version: 0.0.0-use.local
+  resolution: "@conversant/config@workspace:packages/config"
+  dependencies:
+    "@biomejs/biome": "npm:2.4.4"
+    "@types/node": "npm:^20"
     typescript: "npm:^5"
   languageName: unknown
   linkType: soft
@@ -4673,6 +4685,7 @@ __metadata:
     "@biomejs/biome": "npm:2.4.4"
     "@conversant/backend-core": "workspace:*"
     "@conversant/backend-data": "workspace:*"
+    "@conversant/config": "workspace:*"
     "@conversant/conversation-engine": "workspace:*"
     "@tailwindcss/postcss": "npm:^4"
     "@types/node": "npm:^20"

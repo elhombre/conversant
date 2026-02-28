@@ -1,5 +1,5 @@
+import { loadRootEnv, readInviteBaseUrl } from '@conversant/config'
 import { issueInviteToken } from '../src/auth'
-import { loadInviteEnv } from './load-env'
 
 type Args = {
   ttlHours?: number
@@ -53,10 +53,10 @@ function buildInviteUrl(baseUrl: string, token: string) {
 }
 
 async function main() {
-  loadInviteEnv()
+  loadRootEnv()
 
   const args = parseArgs(process.argv.slice(2))
-  const baseUrl = args.baseUrl ?? process.env.INVITE_BASE_URL ?? 'http://localhost:3000'
+  const baseUrl = args.baseUrl ?? readInviteBaseUrl()
 
   const issued = await issueInviteToken({
     ttlHours: args.ttlHours,
@@ -73,7 +73,7 @@ void main().catch(error => {
   const rawMessage = error instanceof Error ? error.message : String(error)
   const message =
     rawMessage === 'INVITE_ADMIN_SECRET is required to issue invite links'
-      ? `${rawMessage}. Define it in packages/backend-data/.env or export it before running the script.`
+      ? `${rawMessage}. Define it in the repository root .env or export it before running the script.`
       : rawMessage
 
   process.stderr.write(`Failed to generate invite: ${message}\n`)

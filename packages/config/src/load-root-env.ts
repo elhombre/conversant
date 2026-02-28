@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 function parseEnvFile(content: string): Record<string, string> {
   const entries: Record<string, string> = {}
@@ -42,28 +41,46 @@ function parseEnvFile(content: string): Record<string, string> {
   return entries
 }
 
-function loadEnvFile(filePath: string) {
+function loadEnvFile(filePath: string, targetEnv: NodeJS.ProcessEnv) {
   if (!existsSync(filePath)) {
     return
   }
 
   const content = readFileSync(filePath, 'utf8')
   const entries = parseEnvFile(content)
+
   for (const [key, value] of Object.entries(entries)) {
-    const current = process.env[key]
+    const current = targetEnv[key]
     if (typeof current === 'undefined' || current.trim().length === 0) {
-      process.env[key] = value
+      targetEnv[key] = value
     }
   }
 }
 
-export function loadInviteEnv() {
-  const scriptDir = dirname(fileURLToPath(import.meta.url))
-  const packageRoot = resolve(scriptDir, '..')
+function findEnvRoot(startDir: string): string {
+  let cursor = resolve(startDir)
 
-  const candidates = [join(packageRoot, '.env.local'), join(packageRoot, '.env')]
+  while (true) {
+    if (existsSync(join(cursor, '.env')) || existsSync(join(cursor, '.env.local'))) {
+      return cursor
+    }
 
+    const parent = dirname(cursor)
+    if (parent === cursor) {
+      return resolve(startDir)
+    }
+
+    cursor = parent
+  }
+}
+
+export function loadRootEnv(options: { startDir?: string; targetEnv?: NodeJS.ProcessEnv } = {}) {
+  const startDir = options.startDir ?? process.cwd()
+  const targetEnv = options.targetEnv ?? process.env
+  const rootDir = findEnvRoot(startDir)
+
+  const candidates = [join(rootDir, '.env.local'), join(rootDir, '.env')]
   for (const filePath of candidates) {
-    loadEnvFile(filePath)
+    loadEnvFile(filePath, targetEnv)
   }
 }

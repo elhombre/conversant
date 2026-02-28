@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     '@conversant/api-contracts',
     '@conversant/backend-core',
     '@conversant/backend-data',
+    '@conversant/config',
     '@conversant/conversation-engine',
   ],
 }

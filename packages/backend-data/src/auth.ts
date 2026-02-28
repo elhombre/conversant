@@ -1,8 +1,8 @@
 import { createHmac, randomBytes } from 'node:crypto'
+import { readInviteAdminSecret, readInviteSessionEnv } from '@conversant/config'
 import { prisma } from './client'
 
 const DEFAULT_INVITE_TTL_HOURS = 24 * 7
-const DEFAULT_SESSION_TTL_HOURS = 24 * 14
 
 export type InviteConsumeFailureReason =
   | 'invalid_token'
@@ -32,30 +32,6 @@ type InviteTokenData = {
   revokedAt: Date | null
 }
 
-function readRequiredEnv(name: string): string | null {
-  const raw = process.env[name]
-  if (typeof raw !== 'string') {
-    return null
-  }
-
-  const value = raw.trim()
-  return value.length > 0 ? value : null
-}
-
-function readPositiveIntEnv(name: string, defaultValue: number): number {
-  const raw = process.env[name]
-  if (typeof raw !== 'string' || raw.trim().length === 0) {
-    return defaultValue
-  }
-
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return defaultValue
-  }
-
-  return parsed
-}
-
 function hashToken(token: string, secret: string): string {
   return createHmac('sha256', secret).update(token).digest('hex')
 }
@@ -83,7 +59,7 @@ function validateInvite(invite: InviteTokenData | null, now: Date): InviteConsum
 export async function issueInviteToken(
   options: { ttlHours?: number; note?: string | null; createdByUserId?: string | null } = {},
 ) {
-  const adminSecret = readRequiredEnv('INVITE_ADMIN_SECRET')
+  const adminSecret = readInviteAdminSecret()
   if (!adminSecret) {
     throw new Error('INVITE_ADMIN_SECRET is required to issue invite links')
   }
@@ -115,9 +91,8 @@ export async function issueInviteToken(
 }
 
 export async function consumeInviteToken(rawToken: string): Promise<InviteConsumeResult> {
-  const inviteSecret = readRequiredEnv('INVITE_ADMIN_SECRET')
-  const sessionSecret = readRequiredEnv('SESSION_SECRET')
-  if (!inviteSecret || !sessionSecret) {
+  const inviteSessionEnv = readInviteSessionEnv()
+  if (!inviteSessionEnv) {
     return {
       ok: false,
       reason: 'misconfigured',
@@ -133,11 +108,10 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
   }
 
   const now = new Date()
-  const tokenHash = hashToken(token, inviteSecret)
+  const tokenHash = hashToken(token, inviteSessionEnv.inviteAdminSecret)
   const sessionToken = randomBytes(32).toString('base64url')
-  const sessionTokenHash = hashToken(sessionToken, sessionSecret)
-  const sessionTtlHours = readPositiveIntEnv('SESSION_TTL_HOURS', DEFAULT_SESSION_TTL_HOURS)
-  const sessionExpiresAt = new Date(now.getTime() + sessionTtlHours * 60 * 60 * 1000)
+  const sessionTokenHash = hashToken(sessionToken, inviteSessionEnv.sessionSecret)
+  const sessionExpiresAt = new Date(now.getTime() + inviteSessionEnv.sessionTtlHours * 60 * 60 * 1000)
 
   return prisma.$transaction(async tx => {
     const invite = await tx.inviteToken.findUnique({
@@ -233,8 +207,8 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
 }
 
 export async function consumeSessionPageAccess(token: string): Promise<{ userId: string } | null> {
-  const sessionSecret = readRequiredEnv('SESSION_SECRET')
-  if (!sessionSecret) {
+  const inviteSessionEnv = readInviteSessionEnv()
+  if (!inviteSessionEnv) {
     return null
   }
 
@@ -243,7 +217,7 @@ export async function consumeSessionPageAccess(token: string): Promise<{ userId:
     return null
   }
 
-  const tokenHash = hashToken(normalizedToken, sessionSecret)
+  const tokenHash = hashToken(normalizedToken, inviteSessionEnv.sessionSecret)
   const now = new Date()
 
   return prisma.$transaction(async tx => {
@@ -303,8 +277,8 @@ export async function consumeSessionPageAccess(token: string): Promise<{ userId:
 }
 
 export async function resolveSessionUser(token: string): Promise<{ userId: string } | null> {
-  const sessionSecret = readRequiredEnv('SESSION_SECRET')
-  if (!sessionSecret) {
+  const inviteSessionEnv = readInviteSessionEnv()
+  if (!inviteSessionEnv) {
     return null
   }
 
@@ -313,7 +287,7 @@ export async function resolveSessionUser(token: string): Promise<{ userId: strin
     return null
   }
 
-  const tokenHash = hashToken(normalizedToken, sessionSecret)
+  const tokenHash = hashToken(normalizedToken, inviteSessionEnv.sessionSecret)
   const now = new Date()
 
   const session = await prisma.session.findUnique({
@@ -360,8 +334,8 @@ export async function resolveSessionUser(token: string): Promise<{ userId: strin
 }
 
 export async function revokeSessionByToken(token: string): Promise<void> {
-  const sessionSecret = readRequiredEnv('SESSION_SECRET')
-  if (!sessionSecret) {
+  const inviteSessionEnv = readInviteSessionEnv()
+  if (!inviteSessionEnv) {
     return
   }
 
@@ -370,7 +344,7 @@ export async function revokeSessionByToken(token: string): Promise<void> {
     return
   }
 
-  const tokenHash = hashToken(normalizedToken, sessionSecret)
+  const tokenHash = hashToken(normalizedToken, inviteSessionEnv.sessionSecret)
   await prisma.session.updateMany({
     where: {
       tokenHash,

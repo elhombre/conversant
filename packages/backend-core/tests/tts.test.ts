@@ -1,11 +1,21 @@
+import { readOpenAIProviderEnv } from '@conversant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createOpenAIClient, getOpenAIProviderConfig } from '../src/shared/openai-client'
+import { createOpenAIClient } from '../src/shared/openai-client'
 import { handleTtsPost } from '../src/tts'
 import { createJsonRequest, readError, readJson } from './test-utils'
 
 vi.mock('../src/shared/openai-client', () => ({
   createOpenAIClient: vi.fn(),
-  getOpenAIProviderConfig: vi.fn(),
+}))
+
+vi.mock('@conversant/config', () => ({
+  readOpenAIProviderEnv: vi.fn(),
+  readOpenAIModelEnv: vi.fn(() => ({
+    chatModel: 'gpt-4o-mini',
+    sttModel: 'gpt-4o-mini-transcribe',
+    sttLanguageDetectModel: 'whisper-1',
+    ttsModel: 'tts-1',
+  })),
 }))
 
 type OpenAIClient = ReturnType<typeof createOpenAIClient>
@@ -13,7 +23,7 @@ type OpenAIClient = ReturnType<typeof createOpenAIClient>
 describe('handleTtsPost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getOpenAIProviderConfig).mockReturnValue({
+    vi.mocked(readOpenAIProviderEnv).mockReturnValue({
       apiKey: 'test-key',
       baseURL: 'http://provider.local/v1',
     })

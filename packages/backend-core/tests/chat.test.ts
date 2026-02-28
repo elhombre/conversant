@@ -1,12 +1,22 @@
+import { readOpenAIProviderEnv } from '@conversant/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleChatPost } from '../src/chat'
-import { createOpenAIClient, getOpenAIProviderConfig } from '../src/shared/openai-client'
+import { createOpenAIClient } from '../src/shared/openai-client'
 import { asRecord, createJsonRequest, readError, readJson } from './test-utils'
 
 vi.mock('../src/shared/openai-client', () => ({
   createOpenAIClient: vi.fn(),
-  getOpenAIProviderConfig: vi.fn(),
+}))
+
+vi.mock('@conversant/config', () => ({
+  readOpenAIProviderEnv: vi.fn(),
+  readOpenAIModelEnv: vi.fn(() => ({
+    chatModel: 'gpt-4o-mini',
+    sttModel: 'gpt-4o-mini-transcribe',
+    sttLanguageDetectModel: 'whisper-1',
+    ttsModel: 'tts-1',
+  })),
 }))
 
 type OpenAIClient = ReturnType<typeof createOpenAIClient>
@@ -14,14 +24,14 @@ type OpenAIClient = ReturnType<typeof createOpenAIClient>
 describe('handleChatPost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getOpenAIProviderConfig).mockReturnValue({
+    vi.mocked(readOpenAIProviderEnv).mockReturnValue({
       apiKey: 'test-key',
       baseURL: 'http://provider.local/v1',
     })
   })
 
   it('returns provider unavailable when OPENAI_API_KEY is missing', async () => {
-    vi.mocked(getOpenAIProviderConfig).mockReturnValue(null)
+    vi.mocked(readOpenAIProviderEnv).mockReturnValue(null)
 
     const request = createJsonRequest('http://localhost/api/chat', {
       conversationId: 'c-1',
