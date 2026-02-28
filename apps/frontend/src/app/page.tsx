@@ -15,10 +15,13 @@ type CaptureStage = 'idle' | 'speaking' | 'finalizing'
 type AudioCtxState = AudioContextState | 'uninitialized'
 type PersonaId = 'Concise' | 'Conversational' | 'Interviewer'
 type VoiceId = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'
+type SttLanguageCode = 'en' | 'ru' | 'es' | 'de' | 'fr' | 'it' | 'pt' | 'tr' | 'uk' | 'pl'
+type SttLanguageMode = 'off' | 'strict'
 
 type SttErrorCode =
   | 'BadAudioFormat'
   | 'PayloadTooLarge'
+  | 'UnsupportedLanguage'
   | 'NoSpeechDetected'
   | 'Timeout'
   | 'Cancelled'
@@ -28,6 +31,7 @@ type SttErrorCode =
 type SttSuccessPayload = {
   turnId: string
   text: string
+  detectedLanguage?: string | null
   latencyMs?: number
 }
 
@@ -93,6 +97,19 @@ type PendingUtteranceMeta = {
 
 const PERSONA_ORDER: PersonaId[] = ['Concise', 'Conversational', 'Interviewer']
 const VOICE_ORDER: VoiceId[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+const STT_LANGUAGE_ORDER: SttLanguageCode[] = ['en', 'ru', 'es', 'de', 'fr', 'it', 'pt', 'tr', 'uk', 'pl']
+const STT_LANGUAGE_LABELS: Record<SttLanguageCode, string> = {
+  en: 'English',
+  ru: 'Russian',
+  es: 'Spanish',
+  de: 'German',
+  fr: 'French',
+  it: 'Italian',
+  pt: 'Portuguese',
+  tr: 'Turkish',
+  uk: 'Ukrainian',
+  pl: 'Polish',
+}
 const PRE_TRIGGER_DB_MARGIN = 10
 const MAX_TENTATIVE_CAPTURE_MS = 1_200
 
@@ -121,6 +138,7 @@ function getSttErrorMessage(status: number, payload: SttErrorPayload | null) {
   const defaultMessages: Record<SttErrorCode, string> = {
     BadAudioFormat: 'Invalid audio format or payload.',
     PayloadTooLarge: 'Audio payload is too large.',
+    UnsupportedLanguage: 'Detected language is outside the selected language set.',
     NoSpeechDetected: 'No speech detected. Try speaking a bit longer.',
     Timeout: 'STT request timed out. Please retry.',
     Cancelled: 'STT request was cancelled.',
@@ -216,10 +234,13 @@ export default function Home() {
   const [activePreset, setActivePreset] = useState<VadPreset>('Normal')
   const [activePersona, setActivePersona] = useState<PersonaId>('Conversational')
   const [activeVoice, setActiveVoice] = useState<VoiceId>('alloy')
+  const [sttLanguageMode, setSttLanguageMode] = useState<SttLanguageMode>('off')
+  const [selectedSttLanguages, setSelectedSttLanguages] = useState<SttLanguageCode[]>(['en', 'ru'])
   const [lastUtterance, setLastUtterance] = useState<LastUtterance | null>(null)
   const [lastTranscript, setLastTranscript] = useState('')
   const [lastAssistantText, setLastAssistantText] = useState('')
   const [lastTurnId, setLastTurnId] = useState('')
+  const [lastDetectedLanguage, setLastDetectedLanguage] = useState<string | null>(null)
   const [sttLatencyMs, setSttLatencyMs] = useState<number | null>(null)
   const [llmLatencyMs, setLlmLatencyMs] = useState<number | null>(null)
   const [ttsLatencyMs, setTtsLatencyMs] = useState<number | null>(null)
@@ -241,6 +262,8 @@ export default function Home() {
   const activePresetRef = useRef<VadPreset>('Normal')
   const activePersonaRef = useRef<PersonaId>('Conversational')
   const activeVoiceRef = useRef<VoiceId>('alloy')
+  const sttLanguageModeRef = useRef<SttLanguageMode>('off')
+  const selectedSttLanguagesRef = useRef<SttLanguageCode[]>(['en', 'ru'])
   const sttAbortControllerRef = useRef<AbortController | null>(null)
   const chatAbortControllerRef = useRef<AbortController | null>(null)
   const ttsAbortControllerRef = useRef<AbortController | null>(null)
@@ -266,6 +289,23 @@ export default function Home() {
     activeVoiceRef.current = voice
   }, [])
 
+  const toggleSttLanguageMode = useCallback(() => {
+    setSttLanguageMode(previous => (previous === 'off' ? 'strict' : 'off'))
+  }, [])
+
+  const toggleSttLanguage = useCallback((language: SttLanguageCode) => {
+    setSelectedSttLanguages(previous => {
+      if (previous.includes(language)) {
+        if (previous.length === 1) {
+          return previous
+        }
+        return previous.filter(entry => entry !== language)
+      }
+
+      return [...previous, language]
+    })
+  }, [])
+
   useEffect(() => {
     isMutedRef.current = isMuted
   }, [isMuted])
@@ -273,6 +313,14 @@ export default function Home() {
   useEffect(() => {
     micStatusRef.current = micStatus
   }, [micStatus])
+
+  useEffect(() => {
+    sttLanguageModeRef.current = sttLanguageMode
+  }, [sttLanguageMode])
+
+  useEffect(() => {
+    selectedSttLanguagesRef.current = selectedSttLanguages
+  }, [selectedSttLanguages])
 
   const clearActiveTurn = useCallback((turnId: string) => {
     if (activeTurnIdRef.current === turnId) {
@@ -710,6 +758,15 @@ export default function Home() {
       }, 12_000)
 
       setLastTurnId(turnId)
+      const nextLanguageMode = sttLanguageModeRef.current
+      const nextAllowedLanguages = selectedSttLanguagesRef.current
+      if (nextLanguageMode === 'off') {
+        setLastDetectedLanguage('auto')
+      } else if (nextAllowedLanguages.length === 1) {
+        setLastDetectedLanguage(nextAllowedLanguages[0])
+      } else {
+        setLastDetectedLanguage(null)
+      }
       setSttLatencyMs(null)
       setLlmLatencyMs(null)
       setTtsLatencyMs(null)
@@ -729,6 +786,8 @@ export default function Home() {
             turnId,
             preset: pending.preset,
             durationMs: pending.durationMs,
+            sttLanguageMode: sttLanguageModeRef.current,
+            allowedLanguages: selectedSttLanguagesRef.current,
           }),
         )
 
@@ -774,6 +833,11 @@ export default function Home() {
         }
 
         setLastTranscript(successPayload.text)
+        setLastDetectedLanguage(
+          typeof successPayload.detectedLanguage === 'string' && successPayload.detectedLanguage.length > 0
+            ? successPayload.detectedLanguage
+            : null,
+        )
         setLastError(null)
         setSttLatencyMs(typeof successPayload.latencyMs === 'number' ? successPayload.latencyMs : elapsedMs)
 
@@ -1179,6 +1243,7 @@ export default function Home() {
     setLastTranscript('')
     setLastAssistantText('')
     setLastTurnId('')
+    setLastDetectedLanguage(null)
     setSttLatencyMs(null)
     setLlmLatencyMs(null)
     setTtsLatencyMs(null)
@@ -1366,6 +1431,35 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
+              <p className="text-sm font-medium">STT languages</p>
+              <Button
+                className="w-full"
+                onClick={toggleSttLanguageMode}
+                variant={sttLanguageMode === 'strict' ? 'default' : 'outline'}
+              >
+                Language filter: {sttLanguageMode === 'strict' ? 'strict' : 'off (faster)'}
+              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                {STT_LANGUAGE_ORDER.map(language => (
+                  <Button
+                    className="w-full justify-start"
+                    key={language}
+                    onClick={() => toggleSttLanguage(language)}
+                    size="sm"
+                    variant={selectedSttLanguages.includes(language) ? 'secondary' : 'outline'}
+                  >
+                    {STT_LANGUAGE_LABELS[language]} ({language})
+                  </Button>
+                ))}
+              </div>
+              <div className="rounded border bg-muted/30 p-3 text-xs text-muted-foreground">
+                {sttLanguageMode === 'strict'
+                  ? `Strict mode: only selected languages are accepted (${selectedSttLanguages.length} selected).`
+                  : 'Off mode: no language restriction, fastest STT path.'}
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <p className="text-sm font-medium">Persona</p>
               <div className="grid grid-cols-3 gap-2">
                 {PERSONA_ORDER.map(personaId => (
@@ -1430,6 +1524,18 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Voice</span>
               <span>{activeVoice}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">STT lang mode</span>
+              <span>{sttLanguageMode}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">STT langs</span>
+              <span className="max-w-[200px] truncate">{selectedSttLanguages.join(', ')}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Detected language</span>
+              <span>{lastDetectedLanguage ?? '--'}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Audio context</span>

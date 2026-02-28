@@ -7,16 +7,69 @@ type SttMeta = {
   turnId: string
   preset?: string
   durationMs?: number
+  sttLanguageMode?: 'off' | 'strict'
+  allowedLanguages?: string[]
 }
 
 type SttErrorCode =
   | 'BadAudioFormat'
   | 'PayloadTooLarge'
+  | 'UnsupportedLanguage'
   | 'NoSpeechDetected'
   | 'Timeout'
   | 'Cancelled'
   | 'ProviderUnavailable'
   | 'InternalError'
+
+const SUPPORTED_STT_LANGUAGES = new Set(['en', 'ru', 'es', 'de', 'fr', 'it', 'pt', 'tr', 'uk', 'pl'])
+
+const LANGUAGE_ALIASES: Record<string, string> = {
+  english: 'en',
+  russian: 'ru',
+  spanish: 'es',
+  german: 'de',
+  french: 'fr',
+  italian: 'it',
+  portuguese: 'pt',
+  turkish: 'tr',
+  ukrainian: 'uk',
+  polish: 'pl',
+}
+
+function normalizeLanguage(value: string): string | null {
+  const raw = value.trim().toLowerCase()
+  if (raw.length === 0) {
+    return null
+  }
+
+  if (raw in LANGUAGE_ALIASES) {
+    return LANGUAGE_ALIASES[raw]
+  }
+
+  if (SUPPORTED_STT_LANGUAGES.has(raw)) {
+    return raw
+  }
+
+  const bcp47Code = raw.split(/[-_]/)[0]
+  if (SUPPORTED_STT_LANGUAGES.has(bcp47Code)) {
+    return bcp47Code
+  }
+
+  return null
+}
+
+function readDetectedLanguage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const rawLanguage = (payload as { language?: unknown }).language
+  if (typeof rawLanguage !== 'string') {
+    return null
+  }
+
+  return normalizeLanguage(rawLanguage)
+}
 
 function getString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
@@ -42,10 +95,28 @@ function parseMeta(rawMeta: FormDataEntryValue | null): SttMeta | null {
     const durationMsRaw = (parsed as { durationMs?: unknown }).durationMs
     const durationMs = typeof durationMsRaw === 'number' && Number.isFinite(durationMsRaw) ? durationMsRaw : undefined
 
+    const sttLanguageModeRaw = getString((parsed as { sttLanguageMode?: unknown }).sttLanguageMode)
+    const sttLanguageMode =
+      sttLanguageModeRaw === 'off' || sttLanguageModeRaw === 'strict' ? sttLanguageModeRaw : undefined
+
+    const allowedLanguagesRaw = (parsed as { allowedLanguages?: unknown }).allowedLanguages
+    const allowedLanguages = Array.isArray(allowedLanguagesRaw)
+      ? [
+          ...new Set(
+            allowedLanguagesRaw
+              .filter(value => typeof value === 'string')
+              .map(value => normalizeLanguage(value))
+              .filter((value): value is string => value !== null),
+          ),
+        ]
+      : undefined
+
     return {
       turnId,
       preset,
       durationMs,
+      sttLanguageMode,
+      allowedLanguages,
     }
   } catch {
     return null
@@ -183,6 +254,12 @@ export async function POST(request: Request) {
     return jsonError(400, meta?.turnId ?? null, 'BadAudioFormat', 'Invalid STT payload')
   }
 
+  const sttLanguageMode = meta.sttLanguageMode ?? 'off'
+  const allowedLanguages = meta.allowedLanguages?.filter(language => SUPPORTED_STT_LANGUAGES.has(language)) ?? []
+  if (sttLanguageMode === 'strict' && allowedLanguages.length === 0) {
+    return jsonError(400, meta.turnId, 'UnsupportedLanguage', 'No supported languages were selected for STT filter')
+  }
+
   if (audio.size === 0) {
     return jsonError(400, meta.turnId, 'BadAudioFormat', 'Audio file is empty')
   }
@@ -195,6 +272,7 @@ export async function POST(request: Request) {
   const signal = createCombinedSignal([request.signal, timeoutSignal])
 
   const sttModel = process.env.OPENAI_STT_MODEL ?? 'gpt-4o-mini-transcribe'
+  const sttLanguageDetectModel = process.env.OPENAI_STT_LANGUAGE_DETECT_MODEL ?? 'whisper-1'
   const client = new OpenAI({
     apiKey: providerApiKey,
     baseURL: providerBaseUrl && providerBaseUrl.length > 0 ? providerBaseUrl : undefined,
@@ -202,24 +280,87 @@ export async function POST(request: Request) {
   const startedAt = performance.now()
 
   try {
-    const result = await client.audio.transcriptions.create(
-      {
-        file: audio,
-        model: sttModel,
-      },
-      {
-        signal,
-      },
-    )
+    const isStrictMultiLanguage = sttLanguageMode === 'strict' && allowedLanguages.length > 1
+    let detectedLanguage: string | null = null
+
+    if (isStrictMultiLanguage) {
+      let detectionResult: unknown
+      try {
+        detectionResult = await client.audio.transcriptions.create(
+          {
+            file: audio,
+            model: sttLanguageDetectModel,
+            response_format: 'verbose_json',
+          },
+          {
+            signal,
+          },
+        )
+      } catch {
+        return jsonError(
+          500,
+          meta.turnId,
+          'ProviderUnavailable',
+          'Strict multi-language filter requires detectable language. Switch to one language or disable filter.',
+        )
+      }
+
+      detectedLanguage = readDetectedLanguage(detectionResult)
+      if (!detectedLanguage) {
+        return jsonError(
+          500,
+          meta.turnId,
+          'InternalError',
+          'Could not detect language for strict multi-language filter',
+        )
+      }
+
+      if (!allowedLanguages.includes(detectedLanguage)) {
+        return jsonError(
+          400,
+          meta.turnId,
+          'UnsupportedLanguage',
+          `Detected language "${detectedLanguage}" is outside allowed set`,
+        )
+      }
+    }
+
+    const requestPayload: {
+      file: File
+      model: string
+      language?: string
+    } = {
+      file: audio,
+      model: sttModel,
+    }
+
+    if (sttLanguageMode === 'strict') {
+      if (allowedLanguages.length === 1) {
+        requestPayload.language = allowedLanguages[0]
+      } else if (detectedLanguage) {
+        requestPayload.language = detectedLanguage
+      }
+    }
+
+    const result = await client.audio.transcriptions.create(requestPayload, {
+      signal,
+    })
 
     const text = result.text.trim()
     if (!text) {
       return jsonError(422, meta.turnId, 'NoSpeechDetected', 'No speech detected in utterance')
     }
 
+    const detectedLanguageFromMain = readDetectedLanguage(result)
+    const finalDetectedLanguage =
+      sttLanguageMode === 'strict' && allowedLanguages.length === 1
+        ? allowedLanguages[0]
+        : (detectedLanguage ?? detectedLanguageFromMain)
+
     return Response.json({
       turnId: meta.turnId,
       text,
+      detectedLanguage: finalDetectedLanguage,
       latencyMs: Math.round(performance.now() - startedAt),
     })
   } catch (error) {
