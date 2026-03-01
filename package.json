@@ -14,14 +14,15 @@
     "format": "turbo run format",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
-    "db:generate": "yarn workspace @conversant/backend-data prisma:generate",
-    "db:migrate:dev": "yarn workspace @conversant/backend-data prisma:migrate:dev",
-    "db:migrate:deploy": "yarn workspace @conversant/backend-data prisma:migrate:deploy",
-    "db:studio": "yarn workspace @conversant/backend-data prisma:studio",
+    "db:generate": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:generate",
+    "db:migrate:dev": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:migrate:dev",
+    "db:migrate:deploy": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:migrate:deploy",
+    "db:studio": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:studio",
     "invite:generate": "yarn workspace @conversant/invite-tools generate"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
+    "dotenv-cli": "^11.0.0",
     "turbo": "^2.8.12",
     "typescript": "^5.9.2"
   },
