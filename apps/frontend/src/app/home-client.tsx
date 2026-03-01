@@ -11,6 +11,7 @@ import {
 } from '@conversant/conversation-engine'
 import { MessageCircleCheck, Settings, Speech } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -20,7 +21,8 @@ import AudioOscilloscopeVisualizer, {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { UI_DICTIONARIES, UI_LOCALE_STORAGE_KEY, type UiLocale } from '@/lib/i18n'
+import type { UiLocale } from '@/i18n/config'
+import { type MessageKeys, useTypedTranslations } from '@/lib/i18n/use-typed-translations'
 import { cn } from '@/lib/utils'
 
 type SectionId = 'conversation' | 'messages' | 'settings'
@@ -104,36 +106,35 @@ function formatClockTime(timestampMs: number): string {
   }).format(new Date(timestampMs))
 }
 
-function resolveConversationStateLabel(
-  state: ConversationState,
-  labels: (typeof UI_DICTIONARIES)['en']['state'],
-): string {
+type TranslateFn = (key: MessageKeys, values?: Record<string, string | number | Date>) => string
+
+function resolveConversationStateLabel(state: ConversationState, t: TranslateFn): string {
   switch (state) {
     case 'assistant_speaking':
-      return labels.assistant_speaking
+      return t('state.assistant_speaking')
     case 'processing':
-      return labels.processing
+      return t('state.processing')
     case 'user_speaking':
-      return labels.user_speaking
+      return t('state.user_speaking')
     case 'error':
-      return labels.error
+      return t('state.error')
     case 'listening':
-      return labels.listening
+      return t('state.listening')
   }
 }
 
-function resolveMicStatusLabel(status: MicStatus, labels: (typeof UI_DICTIONARIES)['en']['mic']): string {
+function resolveMicStatusLabel(status: MicStatus, t: TranslateFn): string {
   switch (status) {
     case 'ready':
-      return labels.ready
+      return t('mic.ready')
     case 'requesting':
-      return labels.requesting
+      return t('mic.requesting')
     case 'denied':
-      return labels.denied
+      return t('mic.denied')
     case 'error':
-      return labels.error
+      return t('mic.error')
     case 'idle':
-      return labels.idle
+      return t('mic.idle')
   }
 }
 
@@ -151,19 +152,19 @@ function resolveStateBadgeVariant(state: ConversationState): 'default' | 'second
   return 'default'
 }
 
-function resolveFeedRoleLabel(role: FeedRole, labels: (typeof UI_DICTIONARIES)['en']['roles']): string {
-  return role === 'assistant' ? labels.assistant : labels.you
+function resolveFeedRoleLabel(role: FeedRole, t: TranslateFn): string {
+  return role === 'assistant' ? t('roles.assistant') : t('roles.you')
 }
 
-function resolveTranscriptRoleLabel(role: TranscriptRole, labels: (typeof UI_DICTIONARIES)['en']['roles']): string {
+function resolveTranscriptRoleLabel(role: TranscriptRole, t: TranslateFn): string {
   if (role === 'assistant') {
-    return labels.assistant
+    return t('roles.assistant')
   }
   if (role === 'system') {
-    return labels.system
+    return t('roles.system')
   }
 
-  return labels.you
+  return t('roles.you')
 }
 
 function isNoSpeechNotice(notice: string | null): boolean {
@@ -174,38 +175,24 @@ function isNoSpeechNotice(notice: string | null): boolean {
   return notice.toLowerCase().includes('no speech detected')
 }
 
-function resolveInitialLocale(): UiLocale {
-  if (typeof window === 'undefined') {
-    return 'en'
-  }
-
-  const stored = window.localStorage.getItem(UI_LOCALE_STORAGE_KEY)
-  if (stored === 'en' || stored === 'ru') {
-    return stored
-  }
-
-  const browserLanguage = window.navigator.language.toLowerCase()
-  return browserLanguage.startsWith('ru') ? 'ru' : 'en'
-}
-
-function resolveSectionLabel(sectionId: SectionId, locale: UiLocale): string {
-  const dictionary = UI_DICTIONARIES[locale]
+function resolveSectionLabel(sectionId: SectionId, t: TranslateFn): string {
   switch (sectionId) {
     case 'conversation':
-      return dictionary.nav.conversation
+      return t('nav.conversation')
     case 'messages':
-      return dictionary.nav.messages
+      return t('nav.messages')
     case 'settings':
-      return dictionary.nav.settings
+      return t('nav.settings')
   }
 }
 
 export function HomeClient() {
   const router = useRouter()
+  const t = useTypedTranslations()
+  const locale = useLocale() as UiLocale
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [activeSection, setActiveSection] = useState<SectionId>('conversation')
-  const [locale, setLocale] = useState<UiLocale>('en')
-  const [localeReady, setLocaleReady] = useState(false)
+  const [localeChangeInFlight, setLocaleChangeInFlight] = useState(false)
   const [themeReady, setThemeReady] = useState(false)
   const [elapsedSec, setElapsedSec] = useState(0)
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
@@ -257,18 +244,8 @@ export function HomeClient() {
   })
 
   useEffect(() => {
-    setLocale(resolveInitialLocale())
-    setLocaleReady(true)
     setThemeReady(true)
   }, [])
-
-  useEffect(() => {
-    if (!localeReady) {
-      return
-    }
-
-    window.localStorage.setItem(UI_LOCALE_STORAGE_KEY, locale)
-  }, [locale, localeReady])
 
   useEffect(() => {
     if (!conversationId) {
@@ -287,7 +264,6 @@ export function HomeClient() {
   }, [conversationId])
 
   const transcriptRefreshKey = lastCompletedTurn?.turnId ?? ''
-  const dictionary = UI_DICTIONARIES[locale]
   const activeTheme: ThemeMode = theme === 'light' || theme === 'dark' ? theme : 'system'
 
   useEffect(() => {
@@ -387,11 +363,11 @@ export function HomeClient() {
       return
     }
 
-    toast.warning(dictionary.toast.noSpeechDetected, {
+    toast.warning(t('toast.noSpeechDetected'), {
       duration: 2800,
       id: 'no-speech-warning',
     })
-  }, [dictionary.toast.noSpeechDetected, lastNotice])
+  }, [lastNotice, t])
 
   useEffect(() => {
     if (!lastCompletedTurn) {
@@ -432,7 +408,7 @@ export function HomeClient() {
   const visualizerHaloStrength = isLightTheme ? 1.2 : 0.95
   const visualizerAuraBaseOpacity = isLightTheme ? 0.4 : undefined
   const visualizerAuraAudioOpacity = isLightTheme ? 0.34 : undefined
-  const visualizerAuraAdditiveBlending = isLightTheme
+  const visualizerAuraAdditiveBlending = !isLightTheme
   const visualizerRenderProfile = isLightTheme ? 'light' : 'default'
   const visualizerHaloResolution = isLightTheme ? 92 : 64
   const setThemeMode = useCallback(
@@ -440,6 +416,36 @@ export function HomeClient() {
       setTheme(mode)
     },
     [setTheme],
+  )
+
+  const setUiLocale = useCallback(
+    async (nextLocale: UiLocale) => {
+      if (nextLocale === locale) {
+        return
+      }
+
+      setLocaleChangeInFlight(true)
+      try {
+        const response = await fetch('/api/i18n/locale', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ locale: nextLocale }),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to set locale')
+        }
+
+        router.refresh()
+      } catch {
+        toast.error(t('toast.localeChangeFailed'))
+      } finally {
+        setLocaleChangeInFlight(false)
+      }
+    },
+    [locale, router, t],
   )
 
   useEffect(() => {
@@ -484,7 +490,7 @@ export function HomeClient() {
                 variant="ghost"
               >
                 <Icon className="size-4" />
-                <span className="hidden sm:inline ml-2">{resolveSectionLabel(section.id, locale)}</span>
+                <span className="hidden sm:inline ml-2">{resolveSectionLabel(section.id, t)}</span>
               </Button>
             )
           })}
@@ -495,21 +501,21 @@ export function HomeClient() {
         <section className="flex-1 flex-col flex gap-3 min-h-0 overflow-hidden">
           <Card>
             <CardHeader className="space-y-1 pb-2">
-              <CardTitle>{dictionary.conversation.title}</CardTitle>
-              <CardDescription className="sm:block hidden">{dictionary.conversation.description}</CardDescription>
+              <CardTitle>{t('conversation.title')}</CardTitle>
+              <CardDescription className="sm:block hidden">{t('conversation.description')}</CardDescription>
             </CardHeader>
             <CardContent className="flex-wrap flex gap-2 items-center">
               <Badge variant={resolveStateBadgeVariant(state)}>
-                {dictionary.badges.state}: {resolveConversationStateLabel(state, dictionary.state)}
+                {t('badges.state')}: {resolveConversationStateLabel(state, t)}
               </Badge>
               <Badge variant={micStatus === 'ready' ? 'secondary' : 'outline'}>
-                {dictionary.badges.mic}: {resolveMicStatusLabel(micStatus, dictionary.mic)}
+                {t('badges.mic')}: {resolveMicStatusLabel(micStatus, t)}
               </Badge>
               <Badge variant={isMuted ? 'destructive' : 'outline'}>
-                {isMuted ? dictionary.badges.muted : dictionary.badges.live}
+                {isMuted ? t('badges.muted') : t('badges.live')}
               </Badge>
               <Badge variant="outline">
-                {dictionary.badges.session}: {formatDuration(elapsedSec)}
+                {t('badges.session')}: {formatDuration(elapsedSec)}
               </Badge>
             </CardContent>
           </Card>
@@ -517,7 +523,7 @@ export function HomeClient() {
           <Card className="relative flex-1 min-h-0 overflow-hidden">
             <CardContent className="relative p-0 h-full">
               <button
-                aria-label={isMuted ? dictionary.conversation.ariaResumeMic : dictionary.conversation.ariaMuteMic}
+                aria-label={isMuted ? t('conversation.ariaResumeMic') : t('conversation.ariaMuteMic')}
                 className="absolute group inset-0 flex items-center justify-center"
                 onClick={toggleMute}
                 type="button"
@@ -564,11 +570,11 @@ export function HomeClient() {
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="backdrop-blur bg-card/80 shadow-xl px-4 py-2 border rounded-full">
                       <p className="font-medium text-sm">
-                        {isMuted ? dictionary.conversation.micPaused : dictionary.conversation.micActive}
+                        {isMuted ? t('conversation.micPaused') : t('conversation.micActive')}
                       </p>
                       <p className="text-muted-foreground text-xs">
                         {Math.round(visibleLevel * 100)}
-                        {dictionary.conversation.inputLevelSuffix}
+                        {t('conversation.inputLevelSuffix')}
                       </p>
                     </div>
                   </div>
@@ -591,8 +597,7 @@ export function HomeClient() {
                         key={message.id}
                       >
                         <p className="mb-0.5 text-[11px] text-muted-foreground">
-                          {resolveFeedRoleLabel(message.role, dictionary.roles)} •{' '}
-                          {formatClockTime(message.createdAtMs)}
+                          {resolveFeedRoleLabel(message.role, t)} • {formatClockTime(message.createdAtMs)}
                         </p>
                         <p className="whitespace-pre-wrap">{message.text}</p>
                       </div>
@@ -601,7 +606,7 @@ export function HomeClient() {
                 </div>
               ) : (
                 <p className="bg-card/70 px-3 py-2 border rounded-xl text-muted-foreground text-sm">
-                  {dictionary.conversation.empty}
+                  {t('conversation.empty')}
                 </p>
               )}
             </CardContent>
@@ -613,29 +618,29 @@ export function HomeClient() {
         <section className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>{dictionary.messages.title}</CardTitle>
-              <CardDescription>{dictionary.messages.description}</CardDescription>
+              <CardTitle>{t('messages.title')}</CardTitle>
+              <CardDescription>{t('messages.description')}</CardDescription>
             </CardHeader>
             <CardContent>
               {!conversationId ? (
                 <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
-                  {dictionary.messages.sessionNotStarted}
+                  {t('messages.sessionNotStarted')}
                 </p>
               ) : transcriptStatus === 'loading' && transcriptMessages.length === 0 ? (
                 <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
-                  {dictionary.messages.loading}
+                  {t('messages.loading')}
                 </p>
               ) : transcriptStatus === 'error' ? (
                 <div className="space-y-3">
                   <p className="px-3 py-3 border rounded-xl text-destructive text-sm">
-                    {transcriptError ?? dictionary.messages.loadErrorDefault}
+                    {transcriptError ?? t('messages.loadErrorDefault')}
                   </p>
                   <Button
                     onClick={() => void loadTranscript(conversationId, transcriptRefreshKey)}
                     size="sm"
                     variant="outline"
                   >
-                    {dictionary.messages.retry}
+                    {t('messages.retry')}
                   </Button>
                 </div>
               ) : transcriptMessages.length > 0 ? (
@@ -663,8 +668,7 @@ export function HomeClient() {
                         )}
                       >
                         <p className="mb-1 text-muted-foreground text-xs">
-                          {resolveTranscriptRoleLabel(message.role, dictionary.roles)} •{' '}
-                          {formatClockTime(message.createdAtMs)}
+                          {resolveTranscriptRoleLabel(message.role, t)} • {formatClockTime(message.createdAtMs)}
                         </p>
                         <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                       </div>
@@ -673,7 +677,7 @@ export function HomeClient() {
                 </div>
               ) : (
                 <p className="bg-card/70 px-3 py-3 border rounded-xl text-muted-foreground text-sm">
-                  {dictionary.messages.empty}
+                  {t('messages.empty')}
                 </p>
               )}
             </CardContent>
@@ -685,12 +689,12 @@ export function HomeClient() {
         <section className="gap-4 md:grid-cols-2 grid">
           <Card>
             <CardHeader>
-              <CardTitle>{dictionary.settings.appearance.title}</CardTitle>
-              <CardDescription>{dictionary.settings.appearance.description}</CardDescription>
+              <CardTitle>{t('settings.appearance.title')}</CardTitle>
+              <CardDescription>{t('settings.appearance.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
-                <p className="font-medium text-sm">{dictionary.settings.appearance.theme}</p>
+                <p className="font-medium text-sm">{t('settings.appearance.theme')}</p>
                 <div className="gap-2 grid-cols-3 grid">
                   <Button
                     disabled={!themeReady}
@@ -698,7 +702,7 @@ export function HomeClient() {
                     size="sm"
                     variant={activeTheme === 'system' ? 'default' : 'outline'}
                   >
-                    {dictionary.settings.appearance.themeSystem}
+                    {t('settings.appearance.themeSystem')}
                   </Button>
                   <Button
                     disabled={!themeReady}
@@ -706,7 +710,7 @@ export function HomeClient() {
                     size="sm"
                     variant={activeTheme === 'light' ? 'default' : 'outline'}
                   >
-                    {dictionary.settings.appearance.themeLight}
+                    {t('settings.appearance.themeLight')}
                   </Button>
                   <Button
                     disabled={!themeReady}
@@ -714,29 +718,29 @@ export function HomeClient() {
                     size="sm"
                     variant={activeTheme === 'dark' ? 'default' : 'outline'}
                   >
-                    {dictionary.settings.appearance.themeDark}
+                    {t('settings.appearance.themeDark')}
                   </Button>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <p className="font-medium text-sm">{dictionary.settings.appearance.language}</p>
+                <p className="font-medium text-sm">{t('settings.appearance.language')}</p>
                 <div className="gap-2 grid-cols-2 grid">
                   <Button
-                    disabled={!localeReady}
-                    onClick={() => setLocale('en')}
+                    disabled={localeChangeInFlight}
+                    onClick={() => void setUiLocale('en')}
                     size="sm"
                     variant={locale === 'en' ? 'default' : 'outline'}
                   >
-                    {dictionary.settings.appearance.languageEn}
+                    {t('settings.appearance.languageEn')}
                   </Button>
                   <Button
-                    disabled={!localeReady}
-                    onClick={() => setLocale('ru')}
+                    disabled={localeChangeInFlight}
+                    onClick={() => void setUiLocale('ru')}
                     size="sm"
                     variant={locale === 'ru' ? 'default' : 'outline'}
                   >
-                    {dictionary.settings.appearance.languageRu}
+                    {t('settings.appearance.languageRu')}
                   </Button>
                 </div>
               </div>
@@ -745,27 +749,27 @@ export function HomeClient() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{dictionary.settings.session.title}</CardTitle>
-              <CardDescription>{dictionary.settings.session.description}</CardDescription>
+              <CardTitle>{t('settings.session.title')}</CardTitle>
+              <CardDescription>{t('settings.session.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="gap-2 grid-cols-2 grid">
                 <Button onClick={toggleMute} variant={isMuted ? 'secondary' : 'destructive'}>
-                  {dictionary.settings.session.muteResume}
+                  {t('settings.session.muteResume')}
                 </Button>
                 <Button onClick={resetSession} variant="outline">
-                  {dictionary.settings.session.resetSession}
+                  {t('settings.session.resetSession')}
                 </Button>
                 <Button onClick={reconnectMicrophone} variant="secondary">
-                  {dictionary.settings.session.reconnectMic}
+                  {t('settings.session.reconnectMic')}
                 </Button>
                 <Button disabled={isMuted || micStatus !== 'ready'} onClick={releaseUtteranceUrl}>
-                  {dictionary.settings.session.clearRecording}
+                  {t('settings.session.clearRecording')}
                 </Button>
               </div>
               <div className="bg-muted/30 p-3 border rounded text-muted-foreground text-xs">
-                {dictionary.settings.session.capture}: {captureStage} | {dictionary.settings.session.mic}:{' '}
-                {resolveMicStatusLabel(micStatus, dictionary.mic)}
+                {t('settings.session.capture')}: {captureStage} | {t('settings.session.mic')}:{' '}
+                {resolveMicStatusLabel(micStatus, t)}
               </div>
               {lastUtterance ? (
                 // biome-ignore lint/a11y/useMediaCaption: local mic preview audio has no caption track source.
@@ -776,12 +780,12 @@ export function HomeClient() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{dictionary.settings.voice.title}</CardTitle>
-              <CardDescription>{dictionary.settings.voice.description}</CardDescription>
+              <CardTitle>{t('settings.voice.title')}</CardTitle>
+              <CardDescription>{t('settings.voice.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
-                <p className="font-medium text-sm">{dictionary.settings.voice.persona}</p>
+                <p className="font-medium text-sm">{t('settings.voice.persona')}</p>
                 <div className="gap-2 grid-cols-3 grid">
                   {PERSONA_ORDER.map(persona => (
                     <Button
@@ -796,7 +800,7 @@ export function HomeClient() {
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="font-medium text-sm">{dictionary.settings.voice.voice}</p>
+                <p className="font-medium text-sm">{t('settings.voice.voice')}</p>
                 <div className="gap-2 grid-cols-3 grid">
                   {VOICE_ORDER.map(voice => (
                     <Button
@@ -815,13 +819,13 @@ export function HomeClient() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{dictionary.settings.stt.title}</CardTitle>
-              <CardDescription>{dictionary.settings.stt.description}</CardDescription>
+              <CardTitle>{t('settings.stt.title')}</CardTitle>
+              <CardDescription>{t('settings.stt.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button onClick={toggleSttLanguageMode} variant={sttLanguageMode === 'strict' ? 'default' : 'outline'}>
-                {dictionary.settings.stt.languageFilter}:{' '}
-                {sttLanguageMode === 'strict' ? dictionary.settings.stt.strict : dictionary.settings.stt.offFaster}
+                {t('settings.stt.languageFilter')}:{' '}
+                {sttLanguageMode === 'strict' ? t('settings.stt.strict') : t('settings.stt.offFaster')}
               </Button>
               <div className="gap-2 grid-cols-2 grid">
                 {STT_LANGUAGE_ORDER.map(language => (
@@ -841,8 +845,8 @@ export function HomeClient() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{dictionary.settings.sensitivity.title}</CardTitle>
-              <CardDescription>{dictionary.settings.sensitivity.description}</CardDescription>
+              <CardTitle>{t('settings.sensitivity.title')}</CardTitle>
+              <CardDescription>{t('settings.sensitivity.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="gap-2 grid-cols-3 grid">
@@ -858,13 +862,13 @@ export function HomeClient() {
                 ))}
               </div>
               <div className="bg-muted/30 p-3 border rounded text-muted-foreground text-xs">
-                {dictionary.settings.sensitivity.threshold}: {activeConfig.thresholdDb} dB |{' '}
-                {dictionary.settings.sensitivity.startHold}: {activeConfig.startHoldMs} ms |{' '}
-                {dictionary.settings.sensitivity.endHold}: {activeConfig.endHoldMs} ms
+                {t('settings.sensitivity.threshold')}: {activeConfig.thresholdDb} dB |{' '}
+                {t('settings.sensitivity.startHold')}: {activeConfig.startHoldMs} ms |{' '}
+                {t('settings.sensitivity.endHold')}: {activeConfig.endHoldMs} ms
               </div>
               <div className="bg-muted/30 p-3 border rounded text-muted-foreground text-xs">
-                {dictionary.settings.sensitivity.stt}: {sttLatencyMs ?? '--'} ms | {dictionary.settings.sensitivity.llm}
-                : {llmLatencyMs ?? '--'} ms | {dictionary.settings.sensitivity.tts}: {ttsLatencyMs ?? '--'} ms
+                {t('settings.sensitivity.stt')}: {sttLatencyMs ?? '--'} ms | {t('settings.sensitivity.llm')}:{' '}
+                {llmLatencyMs ?? '--'} ms | {t('settings.sensitivity.tts')}: {ttsLatencyMs ?? '--'} ms
               </div>
             </CardContent>
           </Card>

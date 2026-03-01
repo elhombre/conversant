@@ -96,6 +96,7 @@
     }
   },
   "toast": {
-    "noSpeechDetected": "No speech detected. Try speaking a bit longer."
+    "noSpeechDetected": "No speech detected. Try speaking a bit longer.",
+    "localeChangeFailed": "Failed to switch language. Try again."
   }
 }
