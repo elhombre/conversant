@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@conversant/config": "workspace:*",
-    "@prisma/client": "6.19.2"
+    "@prisma/client": "7.4.2"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.4",
