@@ -9,6 +9,7 @@ const ERROR_LABELS: Record<string, string> = {
   expired: 'Invite link has expired.',
   revoked: 'Invite link was revoked.',
   misconfigured: 'Invite auth is not configured on server.',
+  session_reuse: 'This invite session was already used. Open a new invite link.',
 }
 
 export default function InviteRequiredPage() {

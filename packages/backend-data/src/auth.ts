@@ -248,7 +248,73 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
 }
 
 export async function consumeSessionPageAccess(token: string): Promise<{ userId: string } | null> {
-  return resolveSessionUser(token)
+  const inviteSessionEnv = readInviteSessionEnv()
+  if (!inviteSessionEnv) {
+    return null
+  }
+
+  const normalizedToken = token.trim()
+  if (normalizedToken.length === 0) {
+    return null
+  }
+
+  const tokenHash = hashToken(normalizedToken, inviteSessionEnv.sessionSecret)
+  const now = new Date()
+
+  return prisma.$transaction(async tx => {
+    const session = await tx.session.findUnique({
+      where: {
+        tokenHash,
+      },
+      select: {
+        id: true,
+        userId: true,
+        revokedAt: true,
+        expiresAt: true,
+        entryConsumedAt: true,
+      },
+    })
+
+    if (!session) {
+      return null
+    }
+
+    if (session.revokedAt || session.expiresAt.getTime() <= now.getTime() || session.entryConsumedAt) {
+      return null
+    }
+
+    const claimed = await tx.session.updateMany({
+      where: {
+        id: session.id,
+        revokedAt: null,
+        entryConsumedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      data: {
+        entryConsumedAt: now,
+        lastSeenAt: now,
+      },
+    })
+
+    if (claimed.count !== 1) {
+      return null
+    }
+
+    await tx.user.update({
+      where: {
+        id: session.userId,
+      },
+      data: {
+        lastSeenAt: now,
+      },
+    })
+
+    return {
+      userId: session.userId,
+    }
+  })
 }
 
 export async function resolveSessionUser(token: string): Promise<{ userId: string } | null> {
