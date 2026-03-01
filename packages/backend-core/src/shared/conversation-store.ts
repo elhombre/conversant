@@ -8,6 +8,7 @@ export type ConversationMessage = {
 export type ConversationScope = {
   conversationId: string
   userId?: string
+  conversationMaxDurationSec?: number | null
 }
 
 export type ConversationTurn = {
@@ -30,8 +31,17 @@ class InMemoryConversationStore implements ConversationStore {
   private readonly messagesByConversation = new Map<string, ConversationMessage[]>()
   private readonly startedAtByConversation = new Map<string, number>()
 
+  private resolveConversationLimitSec(scope: ConversationScope): number | null {
+    const scopedLimit = scope.conversationMaxDurationSec
+    if (typeof scopedLimit === 'number' && scopedLimit > 0) {
+      return scopedLimit
+    }
+
+    return readAssistantRuntimeEnv().conversationMaxDurationSec
+  }
+
   private isConversationExpired(scope: ConversationScope): boolean {
-    const configuredLimitSec = readAssistantRuntimeEnv().conversationMaxDurationSec
+    const configuredLimitSec = this.resolveConversationLimitSec(scope)
     if (configuredLimitSec === null) {
       return false
     }

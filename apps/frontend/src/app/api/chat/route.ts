@@ -12,6 +12,7 @@ export async function POST(request: Request) {
 
   return handleChatPost(request, {
     userId: auth.userId,
+    conversationMaxDurationSec: auth.conversationMaxDurationSec,
     conversationStore: serverConversationStore,
   })
 }

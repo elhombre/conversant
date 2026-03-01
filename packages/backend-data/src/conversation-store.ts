@@ -13,6 +13,7 @@ export type ConversationMessageRecord = {
 export type ConversationScopeRecord = {
   conversationId: string
   userId?: string
+  conversationMaxDurationSec?: number | null
 }
 
 export type ConversationTurnRecord = {
@@ -94,6 +95,14 @@ function resolveDurationLimitSec(
   return fallbackLimitSec
 }
 
+function resolveScopedDurationLimitSec(scope: ConversationScopeRecord): number | null {
+  if (typeof scope.conversationMaxDurationSec === 'number' && scope.conversationMaxDurationSec > 0) {
+    return scope.conversationMaxDurationSec
+  }
+
+  return readAssistantRuntimeEnv().conversationMaxDurationSec
+}
+
 function isConversationExpired(
   conversation: ConversationLifetimeRecord,
   fallbackLimitSec: number | null,
@@ -111,7 +120,7 @@ function isConversationExpired(
 export function createPrismaConversationStore(): ConversationStoreRecord {
   return {
     async getHistory(scope) {
-      const configuredDurationLimitSec = readAssistantRuntimeEnv().conversationMaxDurationSec
+      const configuredDurationLimitSec = resolveScopedDurationLimitSec(scope)
       const conversation = await prisma.conversation.findFirst({
         where: scope.userId
           ? {
@@ -187,7 +196,7 @@ export function createPrismaConversationStore(): ConversationStoreRecord {
 
     async appendTurn(scope, turn) {
       const userId = assertUserScope(scope)
-      const configuredDurationLimitSec = readAssistantRuntimeEnv().conversationMaxDurationSec
+      const configuredDurationLimitSec = resolveScopedDurationLimitSec(scope)
 
       await prisma.$transaction(async tx => {
         const conversation = await tx.conversation.upsert({

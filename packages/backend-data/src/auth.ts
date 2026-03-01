@@ -17,6 +17,7 @@ export type InviteConsumeResult =
       ok: true
       inviteId: string
       userId: string
+      conversationMaxDurationSec: number | null
       sessionToken: string
       sessionExpiresAt: Date
     }
@@ -29,10 +30,24 @@ type InviteTokenData = {
   id: string
   tokenHash: string
   expiresAt: Date
+  conversationMaxDurationSec: number | null
   maxUses: number
   usesCount: number
   usedAt: Date | null
   revokedAt: Date | null
+}
+
+export type SessionUser = {
+  userId: string
+  conversationMaxDurationSec: number | null
+}
+
+function normalizePositiveInteger(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null
+  }
+
+  return Math.floor(value)
 }
 
 function hashToken(token: string, secret: string): string {
@@ -60,7 +75,13 @@ function validateInvite(invite: InviteTokenData | null, now: Date): InviteConsum
 }
 
 export async function issueInviteToken(
-  options: { ttlHours?: number; maxUses?: number; note?: string | null; createdByUserId?: string | null } = {},
+  options: {
+    ttlHours?: number
+    maxUses?: number
+    conversationMaxDurationSec?: number | null
+    note?: string | null
+    createdByUserId?: string | null
+  } = {},
 ) {
   const adminSecret = readInviteAdminSecret()
   if (!adminSecret) {
@@ -75,6 +96,7 @@ export async function issueInviteToken(
     typeof options.maxUses === 'number' && Number.isFinite(options.maxUses) && options.maxUses > 0
       ? Math.floor(options.maxUses)
       : 1
+  const conversationMaxDurationSec = normalizePositiveInteger(options.conversationMaxDurationSec)
 
   const nowMs = Date.now()
   const expiresAt = new Date(nowMs + ttlHours * 60 * 60 * 1000)
@@ -86,6 +108,7 @@ export async function issueInviteToken(
       tokenHash,
       expiresAt,
       maxUses,
+      conversationMaxDurationSec,
       note: options.note ?? null,
       createdByUserId: options.createdByUserId ?? null,
     },
@@ -96,6 +119,7 @@ export async function issueInviteToken(
     token: inviteToken,
     expiresAt,
     maxUses: invite.maxUses,
+    conversationMaxDurationSec: invite.conversationMaxDurationSec,
   }
 }
 
@@ -131,6 +155,7 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
         id: true,
         tokenHash: true,
         expiresAt: true,
+        conversationMaxDurationSec: true,
         maxUses: true,
         usesCount: true,
         usedAt: true,
@@ -189,6 +214,7 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
           id: true,
           tokenHash: true,
           expiresAt: true,
+          conversationMaxDurationSec: true,
           maxUses: true,
           usesCount: true,
           usedAt: true,
@@ -225,6 +251,7 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
         userId: user.id,
         tokenHash: sessionTokenHash,
         expiresAt: sessionExpiresAt,
+        conversationMaxDurationSec: invite.conversationMaxDurationSec,
       },
     })
 
@@ -241,13 +268,14 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
       ok: true,
       inviteId: invite.id,
       userId: user.id,
+      conversationMaxDurationSec: invite.conversationMaxDurationSec,
       sessionToken,
       sessionExpiresAt,
     } satisfies InviteConsumeResult
   })
 }
 
-export async function consumeSessionPageAccess(token: string): Promise<{ userId: string } | null> {
+export async function consumeSessionPageAccess(token: string): Promise<SessionUser | null> {
   const inviteSessionEnv = readInviteSessionEnv()
   if (!inviteSessionEnv) {
     return null
@@ -269,6 +297,7 @@ export async function consumeSessionPageAccess(token: string): Promise<{ userId:
       select: {
         id: true,
         userId: true,
+        conversationMaxDurationSec: true,
         revokedAt: true,
         expiresAt: true,
         entryConsumedAt: true,
@@ -313,11 +342,12 @@ export async function consumeSessionPageAccess(token: string): Promise<{ userId:
 
     return {
       userId: session.userId,
+      conversationMaxDurationSec: session.conversationMaxDurationSec,
     }
   })
 }
 
-export async function resolveSessionUser(token: string): Promise<{ userId: string } | null> {
+export async function resolveSessionUser(token: string): Promise<SessionUser | null> {
   const inviteSessionEnv = readInviteSessionEnv()
   if (!inviteSessionEnv) {
     return null
@@ -338,6 +368,7 @@ export async function resolveSessionUser(token: string): Promise<{ userId: strin
     select: {
       id: true,
       userId: true,
+      conversationMaxDurationSec: true,
       revokedAt: true,
       expiresAt: true,
     },
@@ -371,6 +402,7 @@ export async function resolveSessionUser(token: string): Promise<{ userId: strin
 
   return {
     userId: session.userId,
+    conversationMaxDurationSec: session.conversationMaxDurationSec,
   }
 }
 

@@ -6,6 +6,7 @@ type CliOptions = {
   ttlHours?: number
   ttlDays?: number
   maxUses?: number
+  conversationMaxDurationSec?: number
   note?: string
   baseUrl?: string
 }
@@ -43,6 +44,7 @@ async function runGenerateInvite(options: CliOptions): Promise<void> {
   const issued = await issueInviteToken({
     ttlHours,
     maxUses: options.maxUses,
+    conversationMaxDurationSec: options.conversationMaxDurationSec,
     note: options.note ?? null,
   })
 
@@ -52,6 +54,11 @@ async function runGenerateInvite(options: CliOptions): Promise<void> {
   process.stdout.write(`max_uses: ${issued.maxUses}\n`)
   process.stdout.write('uses_count: 0\n')
   process.stdout.write(`uses_left: ${issued.maxUses}\n`)
+  process.stdout.write(
+    `conversation_max_duration_sec: ${
+      typeof issued.conversationMaxDurationSec === 'number' ? issued.conversationMaxDurationSec : 'default(env)'
+    }\n`,
+  )
   process.stdout.write(`invite_url: ${inviteUrl}\n`)
 }
 
@@ -65,6 +72,11 @@ async function main(argv: string[]): Promise<void> {
       '--max-uses <count>',
       'Maximum number of successful invite consumptions.',
       parsePositiveInteger('--max-uses'),
+    )
+    .option(
+      '--conversation-max-duration-sec <seconds>',
+      'Optional conversation duration limit for sessions created from this invite.',
+      parsePositiveInteger('--conversation-max-duration-sec'),
     )
     .option('--note <text>', 'Optional invite note stored in DB.')
     .option('--base-url <url>', 'Base URL for generated consume link.')

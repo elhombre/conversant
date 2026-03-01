@@ -13,6 +13,7 @@ export type AuthResult =
   | {
       ok: true
       userId: string
+      conversationMaxDurationSec: number | null
     }
   | {
       ok: false
@@ -83,6 +84,7 @@ export async function requireAuthenticatedUser(request: Request): Promise<AuthRe
     return {
       ok: true,
       userId: publicAccessUser.userId,
+      conversationMaxDurationSec: null,
     }
   }
 
@@ -131,6 +133,7 @@ export async function requireAuthenticatedUser(request: Request): Promise<AuthRe
   return {
     ok: true,
     userId: session.userId,
+    conversationMaxDurationSec: session.conversationMaxDurationSec,
   }
 }
 

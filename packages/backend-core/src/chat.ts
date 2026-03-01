@@ -19,6 +19,7 @@ const CHAT_MAX_HISTORY_MESSAGES = 24
 
 export type ChatHandlerOptions = {
   userId?: string
+  conversationMaxDurationSec?: number | null
   conversationStore?: ConversationStore
 }
 
@@ -173,6 +174,7 @@ export async function handleChatPost(request: Request, options: ChatHandlerOptio
   const scope: ConversationScope = {
     conversationId: body.conversationId,
     userId: options.userId,
+    conversationMaxDurationSec: options.conversationMaxDurationSec,
   }
   let serverHistory: ChatHistoryMessage[]
   try {

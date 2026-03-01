@@ -1,4 +1,4 @@
-export type { InviteConsumeFailureReason, InviteConsumeResult } from './auth'
+export type { InviteConsumeFailureReason, InviteConsumeResult, SessionUser } from './auth'
 export {
   consumeInviteToken,
   consumeSessionPageAccess,
