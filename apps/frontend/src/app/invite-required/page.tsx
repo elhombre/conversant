@@ -8,6 +8,7 @@ const ERROR_LABELS: Record<string, string> = {
   used: 'Invite usage limit reached.',
   expired: 'Invite link has expired.',
   revoked: 'Invite link was revoked.',
+  unavailable: 'Invite service is temporarily unavailable. Please retry in a moment.',
   misconfigured: 'Invite auth is not configured on server.',
   session_reuse: 'This invite session was already used. Open a new invite link.',
 }

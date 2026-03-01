@@ -150,7 +150,7 @@ export async function consumeInvite(inviteToken: string): Promise<InviteConsumeR
   return consumeInviteToken(inviteToken)
 }
 
-export function getInviteErrorLabel(reason: InviteConsumeFailureReason) {
+export function getInviteErrorLabel(reason: InviteConsumeFailureReason): string {
   switch (reason) {
     case 'invalid_token':
       return 'invalid'
@@ -162,5 +162,9 @@ export function getInviteErrorLabel(reason: InviteConsumeFailureReason) {
       return 'revoked'
     case 'misconfigured':
       return 'misconfigured'
+    case 'temporarily_unavailable':
+      return 'unavailable'
+    default:
+      return 'unavailable'
   }
 }

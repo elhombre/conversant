@@ -10,6 +10,7 @@ export type InviteConsumeFailureReason =
   | 'token_used'
   | 'token_expired'
   | 'token_revoked'
+  | 'temporarily_unavailable'
   | 'misconfigured'
 
 export type InviteConsumeResult =
@@ -36,6 +37,17 @@ type InviteTokenData = {
   usedAt: Date | null
   revokedAt: Date | null
 }
+
+const INVITE_TOKEN_SELECT = {
+  id: true,
+  tokenHash: true,
+  expiresAt: true,
+  conversationMaxDurationSec: true,
+  maxUses: true,
+  usesCount: true,
+  usedAt: true,
+  revokedAt: true,
+} as const
 
 export type SessionUser = {
   userId: string
@@ -72,6 +84,15 @@ function validateInvite(invite: InviteTokenData | null, now: Date): InviteConsum
   }
 
   return null
+}
+
+function isPrismaTemporarilyUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const code = (error as { code?: unknown }).code
+  return code === 'P2028' || code === 'P1001' || code === 'P1002'
 }
 
 export async function issueInviteToken(
@@ -146,21 +167,12 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
   const sessionTokenHash = hashToken(sessionToken, inviteSessionEnv.sessionSecret)
   const sessionExpiresAt = new Date(now.getTime() + inviteSessionEnv.sessionTtlHours * 60 * 60 * 1000)
 
-  return prisma.$transaction(async tx => {
-    const invite = await tx.inviteToken.findUnique({
+  try {
+    const invite = await prisma.inviteToken.findUnique({
       where: {
         tokenHash,
       },
-      select: {
-        id: true,
-        tokenHash: true,
-        expiresAt: true,
-        conversationMaxDurationSec: true,
-        maxUses: true,
-        usesCount: true,
-        usedAt: true,
-        revokedAt: true,
-      },
+      select: INVITE_TOKEN_SELECT,
     })
 
     const invalidReason = validateInvite(invite, now)
@@ -177,102 +189,104 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
       } satisfies InviteConsumeResult
     }
 
-    const claim = await tx.inviteToken.updateMany({
-      where: {
-        id: invite.id,
-        revokedAt: null,
-        usesCount: {
-          lt: invite.maxUses,
-        },
-        OR: [
-          {
-            usesCount: {
-              gt: 0,
-            },
-          },
-          {
-            expiresAt: {
-              gt: now,
-            },
-          },
-        ],
-      },
-      data: {
-        usesCount: {
-          increment: 1,
-        },
-        usedAt: now,
-      },
-    })
-
-    if (claim.count !== 1) {
-      const latest = await tx.inviteToken.findUnique({
+    return prisma.$transaction(async tx => {
+      const claim = await tx.inviteToken.updateMany({
         where: {
-          tokenHash,
+          id: invite.id,
+          revokedAt: null,
+          usesCount: {
+            lt: invite.maxUses,
+          },
+          OR: [
+            {
+              usesCount: {
+                gt: 0,
+              },
+            },
+            {
+              expiresAt: {
+                gt: now,
+              },
+            },
+          ],
         },
-        select: {
-          id: true,
-          tokenHash: true,
-          expiresAt: true,
-          conversationMaxDurationSec: true,
-          maxUses: true,
-          usesCount: true,
-          usedAt: true,
-          revokedAt: true,
+        data: {
+          usesCount: {
+            increment: 1,
+          },
+          usedAt: now,
         },
       })
 
-      const latestReason = validateInvite(latest, now)
+      if (claim.count !== 1) {
+        const latest = await tx.inviteToken.findUnique({
+          where: {
+            tokenHash,
+          },
+          select: INVITE_TOKEN_SELECT,
+        })
+
+        const latestReason = validateInvite(latest, now)
+        return {
+          ok: false,
+          reason: latestReason ?? 'token_used',
+        } satisfies InviteConsumeResult
+      }
+
+      const user = await tx.user.create({
+        data: {
+          lastSeenAt: now,
+        },
+        select: {
+          id: true,
+        },
+      })
+
+      await tx.authIdentity.create({
+        data: {
+          userId: user.id,
+          provider: 'invite',
+          providerUserId: `${invite.id}:${user.id}`,
+        },
+      })
+
+      await tx.session.create({
+        data: {
+          userId: user.id,
+          tokenHash: sessionTokenHash,
+          expiresAt: sessionExpiresAt,
+          conversationMaxDurationSec: invite.conversationMaxDurationSec,
+        },
+      })
+
+      await tx.inviteToken.update({
+        where: {
+          id: invite.id,
+        },
+        data: {
+          usedByUserId: user.id,
+        },
+      })
+
+      return {
+        ok: true,
+        inviteId: invite.id,
+        userId: user.id,
+        conversationMaxDurationSec: invite.conversationMaxDurationSec,
+        sessionToken,
+        sessionExpiresAt,
+      } satisfies InviteConsumeResult
+    })
+  } catch (error) {
+    if (isPrismaTemporarilyUnavailableError(error)) {
       return {
         ok: false,
-        reason: latestReason ?? 'token_used',
-      } satisfies InviteConsumeResult
+        reason: 'temporarily_unavailable',
+      }
     }
 
-    const user = await tx.user.create({
-      data: {
-        lastSeenAt: now,
-      },
-      select: {
-        id: true,
-      },
-    })
-
-    await tx.authIdentity.create({
-      data: {
-        userId: user.id,
-        provider: 'invite',
-        providerUserId: `${invite.id}:${user.id}`,
-      },
-    })
-
-    await tx.session.create({
-      data: {
-        userId: user.id,
-        tokenHash: sessionTokenHash,
-        expiresAt: sessionExpiresAt,
-        conversationMaxDurationSec: invite.conversationMaxDurationSec,
-      },
-    })
-
-    await tx.inviteToken.update({
-      where: {
-        id: invite.id,
-      },
-      data: {
-        usedByUserId: user.id,
-      },
-    })
-
-    return {
-      ok: true,
-      inviteId: invite.id,
-      userId: user.id,
-      conversationMaxDurationSec: invite.conversationMaxDurationSec,
-      sessionToken,
-      sessionExpiresAt,
-    } satisfies InviteConsumeResult
-  })
+    throw error
+  }
 }
 
 export async function consumeSessionPageAccess(token: string): Promise<SessionUser | null> {

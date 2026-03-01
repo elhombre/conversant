@@ -19,16 +19,23 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const inviteToken = requestUrl.searchParams.get('token') ?? ''
   const nextPath = getSafeNextPath(requestUrl.searchParams.get('next'))
+  const unavailableRedirectUrl = new URL('/invite-required', requestUrl)
+  unavailableRedirectUrl.searchParams.set('auth_error', 'unavailable')
 
-  const result = await consumeInvite(inviteToken)
-  const redirectUrl = result.ok ? new URL(nextPath, requestUrl) : new URL('/invite-required', requestUrl)
+  try {
+    const result = await consumeInvite(inviteToken)
+    const redirectUrl = result.ok ? new URL(nextPath, requestUrl) : new URL('/invite-required', requestUrl)
 
-  if (!result.ok) {
-    redirectUrl.searchParams.set('auth_error', getInviteErrorLabel(result.reason))
-    return NextResponse.redirect(redirectUrl)
+    if (!result.ok) {
+      redirectUrl.searchParams.set('auth_error', getInviteErrorLabel(result.reason))
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    const response = NextResponse.redirect(redirectUrl)
+    applySessionCookie(response, result.sessionToken, result.sessionExpiresAt)
+    return response
+  } catch (error) {
+    console.error('[invite.consume] unexpected error', error)
+    return NextResponse.redirect(unavailableRedirectUrl)
   }
-
-  const response = NextResponse.redirect(redirectUrl)
-  applySessionCookie(response, result.sessionToken, result.sessionExpiresAt)
-  return response
 }
