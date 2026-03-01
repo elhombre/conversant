@@ -333,7 +333,7 @@ export function useCaptureHandlers({
         const playbackDominatesMic = playbackIsActive && playbackDb - db >= BARGE_IN_ECHO_SUPPRESS_DB
         const deltaMatches = db - playbackDb >= BARGE_IN_PLAYBACK_DELTA_DB
 
-        const isLikelyBargeIn = micBoostReached && !playbackDominatesMic && (!playbackIsActive || deltaMatches)
+        const isLikelyBargeIn = playbackIsActive && micBoostReached && !playbackDominatesMic && deltaMatches
 
         if (isLikelyBargeIn) {
           if (bargeInAboveSinceRef.current === null) {

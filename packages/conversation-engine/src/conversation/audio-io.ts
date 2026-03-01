@@ -1,7 +1,7 @@
 export const PRE_TRIGGER_DB_MARGIN = 10
 export const MAX_TENTATIVE_CAPTURE_MS = 1_200
 export const BARGE_IN_MIC_BOOST_DB = 2
-export const BARGE_IN_PLAYBACK_DELTA_DB = -6
+export const BARGE_IN_PLAYBACK_DELTA_DB = 2
 export const BARGE_IN_ECHO_SUPPRESS_DB = 10
 export const BARGE_IN_HOLD_MS = 90
 

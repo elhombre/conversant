@@ -3,6 +3,8 @@ import type { VadConfig, VadPreset } from './types'
 export const VAD_PRESETS: Record<VadPreset, VadConfig> = {
   Normal: {
     thresholdDb: -52,
+    endThresholdOffsetDb: 0,
+    endDropFromPeakDb: 0,
     startHoldMs: 80,
     endHoldMs: 520,
     minSpeechMs: 220,
@@ -10,6 +12,8 @@ export const VAD_PRESETS: Record<VadPreset, VadConfig> = {
   },
   Noisy: {
     thresholdDb: -45,
+    endThresholdOffsetDb: 0,
+    endDropFromPeakDb: 0,
     startHoldMs: 120,
     endHoldMs: 720,
     minSpeechMs: 300,
@@ -17,6 +21,8 @@ export const VAD_PRESETS: Record<VadPreset, VadConfig> = {
   },
   Thoughtful: {
     thresholdDb: -55,
+    endThresholdOffsetDb: 0,
+    endDropFromPeakDb: 0,
     startHoldMs: 70,
     endHoldMs: 900,
     minSpeechMs: 240,

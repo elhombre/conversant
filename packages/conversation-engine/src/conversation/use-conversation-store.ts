@@ -1,11 +1,25 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { VAD_PRESETS } from '../vad/presets'
-import type { VadPreset } from '../vad/types'
+import type { VadConfig, VadPreset } from '../vad/types'
 import { useConversationRuntime } from './use-conversation-runtime'
 import { useConversationState } from './use-conversation-state'
 
+function isChromiumFamilyBrowser(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  const userAgent = navigator.userAgent
+  return (
+    (userAgent.includes('Chrome') || userAgent.includes('CriOS') || userAgent.includes('Edg') || userAgent.includes('OPR')) &&
+    !userAgent.includes('Firefox') &&
+    !userAgent.includes('FxiOS')
+  )
+}
+
 export function useConversationStore() {
   const conversationState = useConversationState()
+  const isChromiumBrowser = useMemo(() => isChromiumFamilyBrowser(), [])
   const runtime = useConversationRuntime({
     setConversationId: conversationState.setConversationId,
     setState: conversationState.setState,
@@ -55,13 +69,36 @@ export function useConversationStore() {
     runtime.selectedSttLanguagesRef.current = conversationState.selectedSttLanguages
   }, [conversationState.selectedSttLanguages, runtime.selectedSttLanguagesRef])
 
+  const resolveVadConfig = useCallback(
+    (preset: VadPreset): VadConfig => {
+      const base = VAD_PRESETS[preset]
+      if (!isChromiumBrowser) {
+        return base
+      }
+
+      return {
+        ...base,
+        thresholdDb: base.thresholdDb - 2,
+        endThresholdOffsetDb: 2,
+        endDropFromPeakDb: 10,
+        startHoldMs: Math.max(50, Math.round(base.startHoldMs * 0.7)),
+        endHoldMs: Math.max(220, Math.round(base.endHoldMs * 0.6)),
+      }
+    },
+    [isChromiumBrowser],
+  )
+
+  useEffect(() => {
+    runtime.vadRef.current.setConfig(resolveVadConfig(conversationState.activePreset))
+  }, [conversationState.activePreset, resolveVadConfig, runtime.vadRef])
+
   const setPreset = useCallback(
     (preset: VadPreset) => {
       conversationState.setActivePreset(preset)
       runtime.activePresetRef.current = preset
-      runtime.vadRef.current.setConfig(VAD_PRESETS[preset])
+      runtime.vadRef.current.setConfig(resolveVadConfig(preset))
     },
-    [conversationState.setActivePreset, runtime.activePresetRef, runtime.vadRef],
+    [conversationState.setActivePreset, resolveVadConfig, runtime.activePresetRef, runtime.vadRef],
   )
 
   const setPersona = useCallback(

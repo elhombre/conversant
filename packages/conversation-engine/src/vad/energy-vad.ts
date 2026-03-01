@@ -5,6 +5,7 @@ type EnergyVadState = {
   aboveSinceMs: number | null
   belowSinceMs: number | null
   speechStartMs: number | null
+  speechPeakDb: number | null
 }
 
 export class EnergyVad {
@@ -15,6 +16,7 @@ export class EnergyVad {
     aboveSinceMs: null,
     belowSinceMs: null,
     speechStartMs: null,
+    speechPeakDb: null,
   }
 
   constructor(config: VadConfig) {
@@ -32,6 +34,7 @@ export class EnergyVad {
       aboveSinceMs: null,
       belowSinceMs: null,
       speechStartMs: null,
+      speechPeakDb: null,
     }
   }
 
@@ -44,10 +47,13 @@ export class EnergyVad {
     this.state.aboveSinceMs = atMs
     this.state.belowSinceMs = null
     this.state.speechStartMs = atMs
+    this.state.speechPeakDb = null
   }
 
   process(db: number, nowMs: number): VadEvent | null {
-    const { thresholdDb, startHoldMs, endHoldMs, minSpeechMs, maxUtteranceMs } = this.config
+    const { thresholdDb, endThresholdOffsetDb, endDropFromPeakDb, startHoldMs, endHoldMs, minSpeechMs, maxUtteranceMs } =
+      this.config
+    const endThresholdDb = thresholdDb + endThresholdOffsetDb
 
     if (!this.state.speaking) {
       if (db >= thresholdDb) {
@@ -59,6 +65,7 @@ export class EnergyVad {
           this.state.speaking = true
           this.state.speechStartMs = nowMs
           this.state.belowSinceMs = null
+          this.state.speechPeakDb = db
           return {
             type: 'speech_start',
             atMs: nowMs,
@@ -73,12 +80,16 @@ export class EnergyVad {
 
     const speechStartMs = this.state.speechStartMs ?? nowMs
     const speechDurationMs = nowMs - speechStartMs
+    if (this.state.speechPeakDb === null || db > this.state.speechPeakDb) {
+      this.state.speechPeakDb = db
+    }
 
     if (speechDurationMs >= maxUtteranceMs) {
       this.state.speaking = false
       this.state.aboveSinceMs = null
       this.state.belowSinceMs = null
       this.state.speechStartMs = null
+      this.state.speechPeakDb = null
 
       return {
         type: 'speech_end',
@@ -89,7 +100,12 @@ export class EnergyVad {
       }
     }
 
-    if (db < thresholdDb) {
+    const peakDb = this.state.speechPeakDb
+    const relativeEndThresholdDb =
+      peakDb !== null && endDropFromPeakDb > 0 ? peakDb - endDropFromPeakDb : Number.NEGATIVE_INFINITY
+    const effectiveEndThresholdDb = Math.max(endThresholdDb, relativeEndThresholdDb)
+
+    if (db < effectiveEndThresholdDb) {
       if (this.state.belowSinceMs === null) {
         this.state.belowSinceMs = nowMs
       }
@@ -99,6 +115,7 @@ export class EnergyVad {
         this.state.aboveSinceMs = null
         this.state.belowSinceMs = null
         this.state.speechStartMs = null
+        this.state.speechPeakDb = null
 
         return {
           type: 'speech_end',

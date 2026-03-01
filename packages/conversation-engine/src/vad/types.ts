@@ -2,6 +2,8 @@ export type VadPreset = 'Normal' | 'Noisy' | 'Thoughtful'
 
 export type VadConfig = {
   thresholdDb: number
+  endThresholdOffsetDb: number
+  endDropFromPeakDb: number
   startHoldMs: number
   endHoldMs: number
   minSpeechMs: number
