@@ -228,7 +228,6 @@ export function HomeClient() {
     captureStage,
     micStatus,
     isMuted,
-    lastError,
     lastNotice,
     activePreset,
     activePersona,
@@ -425,7 +424,6 @@ export function HomeClient() {
   }, [lastCompletedTurn])
 
   const totalFeedMessages = feedMessages.length
-  const inlineNotice = isNoSpeechNotice(lastNotice) ? null : lastNotice
   const isLightTheme = themeReady && resolvedTheme === 'light'
   const visualizerPalette = isLightTheme ? LIGHT_THEME_OSCILLOSCOPE_PALETTE : undefined
   const visualizerWireframeOpacity = isLightTheme ? 0.95 : 0.52
@@ -434,7 +432,7 @@ export function HomeClient() {
   const visualizerHaloStrength = isLightTheme ? 1.2 : 0.95
   const visualizerAuraBaseOpacity = isLightTheme ? 0.4 : undefined
   const visualizerAuraAudioOpacity = isLightTheme ? 0.34 : undefined
-  const visualizerAuraAdditiveBlending = isLightTheme ? false : true
+  const visualizerAuraAdditiveBlending = isLightTheme
   const visualizerRenderProfile = isLightTheme ? 'light' : 'default'
   const visualizerHaloResolution = isLightTheme ? 92 : 64
   const setThemeMode = useCallback(
@@ -871,17 +869,6 @@ export function HomeClient() {
             </CardContent>
           </Card>
         </section>
-      ) : null}
-
-      {(inlineNotice || lastError) && activeSection !== 'settings' ? (
-        <Card>
-          <CardContent className="space-y-2 py-2">
-            {inlineNotice ? (
-              <p className="bg-muted/40 px-3 py-2 border rounded text-muted-foreground text-sm">{inlineNotice}</p>
-            ) : null}
-            {lastError ? <p className="px-3 py-2 border rounded text-destructive text-sm">{lastError}</p> : null}
-          </CardContent>
-        </Card>
       ) : null}
     </main>
   )

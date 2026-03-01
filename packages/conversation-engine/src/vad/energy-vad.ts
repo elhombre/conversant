@@ -51,8 +51,15 @@ export class EnergyVad {
   }
 
   process(db: number, nowMs: number): VadEvent | null {
-    const { thresholdDb, endThresholdOffsetDb, endDropFromPeakDb, startHoldMs, endHoldMs, minSpeechMs, maxUtteranceMs } =
-      this.config
+    const {
+      thresholdDb,
+      endThresholdOffsetDb,
+      endDropFromPeakDb,
+      startHoldMs,
+      endHoldMs,
+      minSpeechMs,
+      maxUtteranceMs,
+    } = this.config
     const endThresholdDb = thresholdDb + endThresholdOffsetDb
 
     if (!this.state.speaking) {

@@ -462,7 +462,15 @@ function BlobMesh({
       depthTest: true,
       depthWrite: false,
     })
-  }, [backWireLift, backWireOpacity, distortion, isLightProfile, palette.backWireLiftColor, palette.coreBackEnd, palette.coreBackStart])
+  }, [
+    backWireLift,
+    backWireOpacity,
+    distortion,
+    isLightProfile,
+    palette.backWireLiftColor,
+    palette.coreBackEnd,
+    palette.coreBackStart,
+  ])
 
   const auraMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -797,9 +805,7 @@ function ScreenLines({
             const local = sampleSmoothedFrequency(frequencyData, bin)
             const blendedRaw = Math.min(1, local * 0.58 + globalEnergy * 0.42)
             const blended =
-              blendedRaw <= lowLevelDetectionFloor
-                ? 0
-                : clamp((blendedRaw + lowLevelBias) * lowLevelGain, 0, 1)
+              blendedRaw <= lowLevelDetectionFloor ? 0 : clamp((blendedRaw + lowLevelBias) * lowLevelGain, 0, 1)
             const target = ringRadius + blended * amplitude
             history[i] = history[i] + (target - history[i]) * temporalLerp
             radii[i] = history[i]
@@ -866,7 +872,10 @@ function ScreenLines({
 
   return (
     <canvas
-      className={cn('pointer-events-none absolute inset-0 z-10', blendMode === 'screen' ? 'mix-blend-screen' : 'mix-blend-normal')}
+      className={cn(
+        'pointer-events-none absolute inset-0 z-10',
+        blendMode === 'screen' ? 'mix-blend-screen' : 'mix-blend-normal',
+      )}
       ref={canvasRef}
     />
   )

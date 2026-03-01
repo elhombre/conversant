@@ -11,7 +11,10 @@ function isChromiumFamilyBrowser(): boolean {
 
   const userAgent = navigator.userAgent
   return (
-    (userAgent.includes('Chrome') || userAgent.includes('CriOS') || userAgent.includes('Edg') || userAgent.includes('OPR')) &&
+    (userAgent.includes('Chrome') ||
+      userAgent.includes('CriOS') ||
+      userAgent.includes('Edg') ||
+      userAgent.includes('OPR')) &&
     !userAgent.includes('Firefox') &&
     !userAgent.includes('FxiOS')
   )
