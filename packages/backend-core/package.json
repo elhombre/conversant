@@ -23,6 +23,6 @@
     "@biomejs/biome": "2.4.4",
     "@types/node": "^20",
     "typescript": "^5",
-    "vitest": "^2.1.8"
+    "vitest": "^4.0.18"
   }
 }
