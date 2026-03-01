@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import path from 'node:path'
 import type { NextConfig } from 'next'
 
 const require = createRequire(import.meta.url)
@@ -21,6 +22,10 @@ const nextConfig: NextConfig = {
     '@conversant/config',
     '@conversant/conversation-engine',
   ],
+  outputFileTracingRoot: path.join(process.cwd(), '../../'),
+  outputFileTracingIncludes: {
+    '/**/*': ['../../packages/backend-data/src/generated/prisma/**/*'],
+  },
 }
 
 export default withNextIntl(nextConfig)

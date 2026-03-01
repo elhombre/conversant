@@ -14,6 +14,8 @@
     "format": "turbo run format",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
+    "vercel:install": "yarn install --immutable && PRISMA_CLI_BINARY_TARGETS=rhel-openssl-3.0.x yarn workspace @conversant/backend-data prisma:generate",
+    "vercel:build": "yarn workspace frontend build && node scripts/vercel/copy-prisma-engine.mjs",
     "db:generate": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:generate",
     "db:migrate:dev": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:migrate:dev",
     "db:migrate:deploy": "dotenv -e .env -- yarn workspace @conversant/backend-data prisma:migrate:deploy",
