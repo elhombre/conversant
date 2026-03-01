@@ -10,6 +10,6 @@ export async function consumePageAccessFromRequest() {
 
   const pageAccess = await consumeSessionPageAccess(sessionToken)
   if (!pageAccess) {
-    redirect('/invite-required?auth_error=session_reuse')
+    redirect('/invite-required')
   }
 }

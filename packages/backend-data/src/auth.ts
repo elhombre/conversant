@@ -29,6 +29,8 @@ type InviteTokenData = {
   id: string
   tokenHash: string
   expiresAt: Date
+  maxUses: number
+  usesCount: number
   usedAt: Date | null
   revokedAt: Date | null
 }
@@ -46,11 +48,11 @@ function validateInvite(invite: InviteTokenData | null, now: Date): InviteConsum
     return 'token_revoked'
   }
 
-  if (invite.usedAt) {
+  if (invite.maxUses <= invite.usesCount) {
     return 'token_used'
   }
 
-  if (invite.expiresAt.getTime() <= now.getTime()) {
+  if (invite.usesCount === 0 && invite.expiresAt.getTime() <= now.getTime()) {
     return 'token_expired'
   }
 
@@ -58,7 +60,7 @@ function validateInvite(invite: InviteTokenData | null, now: Date): InviteConsum
 }
 
 export async function issueInviteToken(
-  options: { ttlHours?: number; note?: string | null; createdByUserId?: string | null } = {},
+  options: { ttlHours?: number; maxUses?: number; note?: string | null; createdByUserId?: string | null } = {},
 ) {
   const adminSecret = readInviteAdminSecret()
   if (!adminSecret) {
@@ -69,6 +71,10 @@ export async function issueInviteToken(
     typeof options.ttlHours === 'number' && Number.isFinite(options.ttlHours) && options.ttlHours > 0
       ? options.ttlHours
       : DEFAULT_INVITE_TTL_HOURS
+  const maxUses =
+    typeof options.maxUses === 'number' && Number.isFinite(options.maxUses) && options.maxUses > 0
+      ? Math.floor(options.maxUses)
+      : 1
 
   const nowMs = Date.now()
   const expiresAt = new Date(nowMs + ttlHours * 60 * 60 * 1000)
@@ -79,6 +85,7 @@ export async function issueInviteToken(
     data: {
       tokenHash,
       expiresAt,
+      maxUses,
       note: options.note ?? null,
       createdByUserId: options.createdByUserId ?? null,
     },
@@ -88,6 +95,7 @@ export async function issueInviteToken(
     inviteId: invite.id,
     token: inviteToken,
     expiresAt,
+    maxUses: invite.maxUses,
   }
 }
 
@@ -123,6 +131,8 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
         id: true,
         tokenHash: true,
         expiresAt: true,
+        maxUses: true,
+        usesCount: true,
         usedAt: true,
         revokedAt: true,
       },
@@ -145,21 +155,51 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
     const claim = await tx.inviteToken.updateMany({
       where: {
         id: invite.id,
-        usedAt: null,
         revokedAt: null,
-        expiresAt: {
-          gt: now,
+        usesCount: {
+          lt: invite.maxUses,
         },
+        OR: [
+          {
+            usesCount: {
+              gt: 0,
+            },
+          },
+          {
+            expiresAt: {
+              gt: now,
+            },
+          },
+        ],
       },
       data: {
+        usesCount: {
+          increment: 1,
+        },
         usedAt: now,
       },
     })
 
     if (claim.count !== 1) {
+      const latest = await tx.inviteToken.findUnique({
+        where: {
+          tokenHash,
+        },
+        select: {
+          id: true,
+          tokenHash: true,
+          expiresAt: true,
+          maxUses: true,
+          usesCount: true,
+          usedAt: true,
+          revokedAt: true,
+        },
+      })
+
+      const latestReason = validateInvite(latest, now)
       return {
         ok: false,
-        reason: 'token_used',
+        reason: latestReason ?? 'token_used',
       } satisfies InviteConsumeResult
     }
 
@@ -176,7 +216,7 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
       data: {
         userId: user.id,
         provider: 'invite',
-        providerUserId: invite.id,
+        providerUserId: `${invite.id}:${user.id}`,
       },
     })
 
@@ -208,73 +248,7 @@ export async function consumeInviteToken(rawToken: string): Promise<InviteConsum
 }
 
 export async function consumeSessionPageAccess(token: string): Promise<{ userId: string } | null> {
-  const inviteSessionEnv = readInviteSessionEnv()
-  if (!inviteSessionEnv) {
-    return null
-  }
-
-  const normalizedToken = token.trim()
-  if (normalizedToken.length === 0) {
-    return null
-  }
-
-  const tokenHash = hashToken(normalizedToken, inviteSessionEnv.sessionSecret)
-  const now = new Date()
-
-  return prisma.$transaction(async tx => {
-    const session = await tx.session.findUnique({
-      where: {
-        tokenHash,
-      },
-      select: {
-        id: true,
-        userId: true,
-        revokedAt: true,
-        expiresAt: true,
-        entryConsumedAt: true,
-      },
-    })
-
-    if (!session) {
-      return null
-    }
-
-    if (session.revokedAt || session.expiresAt.getTime() <= now.getTime() || session.entryConsumedAt) {
-      return null
-    }
-
-    const claimed = await tx.session.updateMany({
-      where: {
-        id: session.id,
-        revokedAt: null,
-        entryConsumedAt: null,
-        expiresAt: {
-          gt: now,
-        },
-      },
-      data: {
-        entryConsumedAt: now,
-        lastSeenAt: now,
-      },
-    })
-
-    if (claimed.count !== 1) {
-      return null
-    }
-
-    await tx.user.update({
-      where: {
-        id: session.userId,
-      },
-      data: {
-        lastSeenAt: now,
-      },
-    })
-
-    return {
-      userId: session.userId,
-    }
-  })
+  return resolveSessionUser(token)
 }
 
 export async function resolveSessionUser(token: string): Promise<{ userId: string } | null> {

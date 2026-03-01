@@ -15,8 +15,7 @@
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
-    "prisma:studio": "prisma studio --schema prisma/schema.prisma",
-    "invite:generate": "tsx scripts/generate-invite.ts"
+    "prisma:studio": "prisma studio --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@conversant/config": "workspace:*",

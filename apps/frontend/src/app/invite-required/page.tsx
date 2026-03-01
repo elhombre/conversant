@@ -5,11 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 const ERROR_LABELS: Record<string, string> = {
   invalid: 'Invite token is invalid.',
-  used: 'Invite link was already used.',
+  used: 'Invite usage limit reached.',
   expired: 'Invite link has expired.',
   revoked: 'Invite link was revoked.',
   misconfigured: 'Invite auth is not configured on server.',
-  session_reuse: 'This invite session was already used. Open a new invite link.',
 }
 
 export default function InviteRequiredPage() {
@@ -29,7 +28,7 @@ export default function InviteRequiredPage() {
             <p className="rounded border border-destructive/40 bg-destructive/10 p-3 text-destructive">{errorText}</p>
           ) : null}
           <p className="text-muted-foreground">
-            Ask the project owner for a one-time invite URL, then open it in this browser.
+            Ask the project owner for an invite URL, then open it in this browser.
           </p>
         </CardContent>
       </Card>
