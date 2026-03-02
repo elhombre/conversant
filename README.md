@@ -33,7 +33,7 @@ Conversant is a demo voice conversation application built as a monorepo.
 
 ## Quick Start
 
-Run from repository root (`code`):
+Run from repository root:
 
 ```bash
 yarn install

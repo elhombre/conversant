@@ -1,9 +1,6 @@
 import type { Metadata } from 'next'
-import { NextIntlClientProvider } from 'next-intl'
 import { Toaster } from 'sonner'
-import { ThemeProvider } from '@/components/providers/theme-provider'
-import { UI_MESSAGES } from '@/i18n/messages'
-import { resolveRequestLocale } from '@/i18n/server-locale'
+import { UiSettingsProvider } from '@/components/providers/ui-settings-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -16,18 +13,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const locale = await resolveRequestLocale()
-  const messages = UI_MESSAGES[locale]
-
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-            {children}
-            <Toaster richColors position="bottom-right" />
-          </ThemeProvider>
-        </NextIntlClientProvider>
+        <UiSettingsProvider>
+          {children}
+          <Toaster richColors position="bottom-right" />
+        </UiSettingsProvider>
       </body>
     </html>
   )

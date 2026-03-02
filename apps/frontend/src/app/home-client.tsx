@@ -11,13 +11,11 @@ import {
 } from '@conversant/conversation-engine'
 import { MessageCircleCheck, Settings, Speech } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useLocale } from 'next-intl'
-import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
 import AudioOscilloscopeVisualizer, {
   type AudioOscilloscopeColorPalette,
 } from '@/components/audio/audio-oscilloscope-visualizer'
+import { type ThemeMode, useUiSettings } from '@/components/providers/ui-settings-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,7 +26,6 @@ import { cn } from '@/lib/utils'
 type SectionId = 'conversation' | 'messages' | 'settings'
 type FeedRole = 'user' | 'assistant'
 type TranscriptRole = 'user' | 'assistant' | 'system'
-type ThemeMode = 'system' | 'light' | 'dark'
 
 type FeedMessage = {
   id: string
@@ -167,14 +164,6 @@ function resolveTranscriptRoleLabel(role: TranscriptRole, t: TranslateFn): strin
   return t('roles.you')
 }
 
-function isNoSpeechNotice(notice: string | null): boolean {
-  if (!notice) {
-    return false
-  }
-
-  return notice.toLowerCase().includes('no speech detected')
-}
-
 function resolveSectionLabel(sectionId: SectionId, t: TranslateFn): string {
   switch (sectionId) {
     case 'conversation':
@@ -189,10 +178,8 @@ function resolveSectionLabel(sectionId: SectionId, t: TranslateFn): string {
 export function HomeClient() {
   const router = useRouter()
   const t = useTypedTranslations()
-  const locale = useLocale() as UiLocale
-  const { theme, setTheme, resolvedTheme } = useTheme()
+  const { locale, setLocale, themeMode, setThemeMode, resolvedTheme } = useUiSettings()
   const [activeSection, setActiveSection] = useState<SectionId>('conversation')
-  const [localeChangeInFlight, setLocaleChangeInFlight] = useState(false)
   const [themeReady, setThemeReady] = useState(false)
   const [elapsedSec, setElapsedSec] = useState(0)
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
@@ -215,7 +202,6 @@ export function HomeClient() {
     captureStage,
     micStatus,
     isMuted,
-    lastNotice,
     activePreset,
     activePersona,
     activeVoice,
@@ -264,7 +250,7 @@ export function HomeClient() {
   }, [conversationId])
 
   const transcriptRefreshKey = lastCompletedTurn?.turnId ?? ''
-  const activeTheme: ThemeMode = theme === 'light' || theme === 'dark' ? theme : 'system'
+  const activeTheme: ThemeMode = themeMode
 
   useEffect(() => {
     if (!conversationId) {
@@ -359,17 +345,6 @@ export function HomeClient() {
   }, [activeSection, conversationId, loadTranscript, transcriptRefreshKey])
 
   useEffect(() => {
-    if (!isNoSpeechNotice(lastNotice)) {
-      return
-    }
-
-    toast.warning(t('toast.noSpeechDetected'), {
-      duration: 2800,
-      id: 'no-speech-warning',
-    })
-  }, [lastNotice, t])
-
-  useEffect(() => {
     if (!lastCompletedTurn) {
       return
     }
@@ -411,41 +386,15 @@ export function HomeClient() {
   const visualizerAuraAdditiveBlending = !isLightTheme
   const visualizerRenderProfile = isLightTheme ? 'light' : 'default'
   const visualizerHaloResolution = isLightTheme ? 92 : 64
-  const setThemeMode = useCallback(
-    (mode: ThemeMode) => {
-      setTheme(mode)
-    },
-    [setTheme],
-  )
-
   const setUiLocale = useCallback(
-    async (nextLocale: UiLocale) => {
+    (nextLocale: UiLocale) => {
       if (nextLocale === locale) {
         return
       }
 
-      setLocaleChangeInFlight(true)
-      try {
-        const response = await fetch('/api/i18n/locale', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({ locale: nextLocale }),
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to set locale')
-        }
-
-        router.refresh()
-      } catch {
-        toast.error(t('toast.localeChangeFailed'))
-      } finally {
-        setLocaleChangeInFlight(false)
-      }
+      setLocale(nextLocale)
     },
-    [locale, router, t],
+    [locale, setLocale],
   )
 
   useEffect(() => {
@@ -470,7 +419,7 @@ export function HomeClient() {
         activeSection === 'conversation' && 'h-screen overflow-hidden',
       )}
     >
-      <header className="sticky top-0 z-20 flex justify-center backdrop-blur bg-background/90 supports-[backdrop-filter]:bg-background/70 py-2">
+      <header className="sticky top-0 z-20 flex justify-center backdrop-blur bg-background/90 supports-backdrop-filter:bg-background/70 py-2">
         <div className="inline-flex gap-2 items-center bg-card/70 p-1 rounded-xl">
           {SECTIONS.map(section => {
             const Icon = section.icon
@@ -532,8 +481,8 @@ export function HomeClient() {
                   className={cn(
                     'absolute inset-0',
                     isLightTheme
-                      ? 'bg-gradient-to-b from-transparent via-blue-50/10 to-blue-100/16'
-                      : 'bg-gradient-to-b from-background to-background via-background/50',
+                      ? 'bg-linear-to-b from-transparent via-blue-50/10 to-blue-100/16'
+                      : 'bg-linear-to-b from-background to-background via-background/50',
                   )}
                 />
                 <div className="relative h-full w-full duration-150 group-hover:scale-[1.005] transition-transform">
@@ -726,20 +675,10 @@ export function HomeClient() {
               <div className="space-y-2">
                 <p className="font-medium text-sm">{t('settings.appearance.language')}</p>
                 <div className="gap-2 grid-cols-2 grid">
-                  <Button
-                    disabled={localeChangeInFlight}
-                    onClick={() => void setUiLocale('en')}
-                    size="sm"
-                    variant={locale === 'en' ? 'default' : 'outline'}
-                  >
+                  <Button onClick={() => setUiLocale('en')} size="sm" variant={locale === 'en' ? 'default' : 'outline'}>
                     {t('settings.appearance.languageEn')}
                   </Button>
-                  <Button
-                    disabled={localeChangeInFlight}
-                    onClick={() => void setUiLocale('ru')}
-                    size="sm"
-                    variant={locale === 'ru' ? 'default' : 'outline'}
-                  >
+                  <Button onClick={() => setUiLocale('ru')} size="sm" variant={locale === 'ru' ? 'default' : 'outline'}>
                     {t('settings.appearance.languageRu')}
                   </Button>
                 </div>
