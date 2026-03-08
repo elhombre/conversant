@@ -461,7 +461,7 @@ __metadata:
     "@conversant/api-contracts": "workspace:*"
     "@conversant/config": "workspace:*"
     "@types/node": "npm:^20"
-    openai: "npm:^6.25.0"
+    openai: "npm:^6.27.0"
     typescript: "npm:^5"
     vitest: "npm:^2.1.8"
   languageName: unknown
@@ -6614,9 +6614,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"openai@npm:^6.25.0":
-  version: 6.25.0
-  resolution: "openai@npm:6.25.0"
+"openai@npm:^6.27.0":
+  version: 6.27.0
+  resolution: "openai@npm:6.27.0"
   peerDependencies:
     ws: ^8.18.0
     zod: ^3.25 || ^4.0
@@ -6627,7 +6627,7 @@ __metadata:
       optional: true
   bin:
     openai: bin/cli
-  checksum: 10c0/88d2000493a2131977ebfe029b6344cf4e598f602779c06c7e9593008e225f6a6ae54a70231591b3174960ea8925bb98ee940f822ebfe810876e6ae330719252
+  checksum: 10c0/88f9205eb1bd6c86c3d7fdab3e3d171c0d03c1e491903084aef35bfeb34fd33b86cb91b4d0eef9068e5bd5406f9dedb74a9a8b9c7c01e3a348a7edf117cbf78e
   languageName: node
   linkType: hard
 
