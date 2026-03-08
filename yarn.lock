@@ -460,7 +460,7 @@ __metadata:
     "@biomejs/biome": "npm:2.4.4"
     "@conversant/api-contracts": "workspace:*"
     "@conversant/config": "workspace:*"
-    "@types/node": "npm:^20"
+    "@types/node": "npm:^25"
     openai: "npm:^6.25.0"
     typescript: "npm:^5"
     vitest: "npm:^2.1.8"
@@ -474,7 +474,7 @@ __metadata:
     "@biomejs/biome": "npm:2.4.4"
     "@conversant/config": "workspace:*"
     "@prisma/client": "npm:6.19.2"
-    "@types/node": "npm:^20"
+    "@types/node": "npm:^25"
     prisma: "npm:6.19.2"
     tsx: "npm:^4.20.6"
     typescript: "npm:^5"
@@ -486,7 +486,7 @@ __metadata:
   resolution: "@conversant/config@workspace:packages/config"
   dependencies:
     "@biomejs/biome": "npm:2.4.4"
-    "@types/node": "npm:^20"
+    "@types/node": "npm:^25"
     typescript: "npm:^5"
   languageName: unknown
   linkType: soft
@@ -512,7 +512,7 @@ __metadata:
     "@biomejs/biome": "npm:2.4.4"
     "@conversant/backend-data": "workspace:*"
     "@conversant/config": "workspace:*"
-    "@types/node": "npm:^20"
+    "@types/node": "npm:^25"
     commander: "npm:^14.0.1"
     tsx: "npm:^4.20.6"
     typescript: "npm:^5"
@@ -3688,21 +3688,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20":
-  version: 20.19.35
-  resolution: "@types/node@npm:20.19.35"
-  dependencies:
-    undici-types: "npm:~6.21.0"
-  checksum: 10c0/e27d3e1eac4105b627fdba2d86577e603c66fc7b4ad61418d41f3898d84b2f5ff3e0c6b6d3948b34976ea91056e6359740b387edcc65ca516c3f2b5a0c0f9c6a
-  languageName: node
-  linkType: hard
-
-"@types/node@npm:^25.3.3":
-  version: 25.3.3
-  resolution: "@types/node@npm:25.3.3"
+"@types/node@npm:^25, @types/node@npm:^25.3.5":
+  version: 25.3.5
+  resolution: "@types/node@npm:25.3.5"
   dependencies:
     undici-types: "npm:~7.18.0"
-  checksum: 10c0/63e1d3816a9f4a706ab5d588d18cb98aa824b97748ff585537d327528e9438f58f69f45c7762e7cd3a1ab32c1619f551aabe8075d13172f9273cf10f6d83ab91
+  checksum: 10c0/4cf0834a6f6933bf0aca6afead117ae3db3b8f02a5f7187a24f871db0fb9344e5e46573ba387bc53b7505e1e219c4c535cbe67221ced95bb5ad98573223b19d0
   languageName: node
   linkType: hard
 
@@ -4359,7 +4350,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "conversant@workspace:."
   dependencies:
-    "@types/node": "npm:^25.3.3"
+    "@types/node": "npm:^25.3.5"
     dotenv-cli: "npm:^11.0.0"
     turbo: "npm:^2.8.12"
     typescript: "npm:^5.9.2"
@@ -5211,7 +5202,7 @@ __metadata:
     "@conversant/conversation-engine": "workspace:*"
     "@react-three/fiber": "npm:^9.5.0"
     "@tailwindcss/postcss": "npm:^4"
-    "@types/node": "npm:^20"
+    "@types/node": "npm:^25"
     "@types/react": "npm:^19"
     "@types/react-dom": "npm:^19"
     "@types/three": "npm:^0"
@@ -8113,13 +8104,6 @@ __metadata:
     tsc: bin/tsc
     tsserver: bin/tsserver
   checksum: 10c0/ad09fdf7a756814dce65bc60c1657b40d44451346858eea230e10f2e95a289d9183b6e32e5c11e95acc0ccc214b4f36289dcad4bf1886b0adb84d711d336a430
-  languageName: node
-  linkType: hard
-
-"undici-types@npm:~6.21.0":
-  version: 6.21.0
-  resolution: "undici-types@npm:6.21.0"
-  checksum: 10c0/c01ed51829b10aa72fc3ce64b747f8e74ae9b60eafa19a7b46ef624403508a54c526ffab06a14a26b3120d055e1104d7abe7c9017e83ced038ea5cf52f8d5e04
   languageName: node
   linkType: hard
 
